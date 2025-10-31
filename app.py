@@ -1,7 +1,6 @@
 import streamlit as st
 import json
 import tempfile
-import uuid
 from datetime import datetime
 import folium
 from streamlit_folium import st_folium
@@ -52,8 +51,8 @@ with st.sidebar:
             st.rerun()
     
     with col2:
-        if st.button("📊 Analizar", use_container_width=True, 
-                    disabled=st.session_state.current_polygon is None):
+        analyze_disabled = st.session_state.current_polygon is None
+        if st.button("📊 Analizar", use_container_width=True, disabled=analyze_disabled):
             st.session_state.analyze_clicked = True
 
 # Función para crear el mapa
@@ -117,22 +116,10 @@ def create_map(base_map_choice):
     draw = Draw(export=False, **draw_options)
     draw.add_to(m)
     
-    # Añadir polígonos existentes
-    for polygon in st.session_state.drawn_polygons:
-        folium.GeoJson(
-            polygon,
-            style_function=lambda x: {
-                'fillColor': '#4CAF50',
-                'color': '#4CAF50',
-                'weight': 3,
-                'fillOpacity': 0.2
-            }
-        ).add_to(m)
-    
     return m
 
 # Función para simular análisis
-def simulate_fertility_analysis(polygon_data, crop):
+def simulate_fertility_analysis(crop):
     import random
     
     crop_requirements = {
@@ -204,7 +191,7 @@ def export_geojson(polygon_data, crop):
 
 # Crear y mostrar el mapa
 st.subheader("Mapa Interactivo")
-st.markdown("Dibuja un polígono en el mapa para analizar la fertilidad del suelo")
+st.markdown("Dibuja un polígono en el mapa usando la herramienta de dibujo (ícono de polígono en la esquina superior izquierda)")
 
 # Crear el mapa
 m = create_map(base_map)
@@ -218,7 +205,7 @@ map_data = st_folium(
 )
 
 # Procesar polígono dibujado
-if map_data["last_active_drawing"]:
+if map_data and map_data.get("last_active_drawing"):
     polygon_data = map_data["last_active_drawing"]
     st.session_state.current_polygon = polygon_data
     
@@ -227,7 +214,7 @@ if map_data["last_active_drawing"]:
         st.session_state.drawn_polygons.append(polygon_data)
         
     # Mostrar información del área
-    st.sidebar.success(f"✅ Polígono dibujado correctamente")
+    st.sidebar.success("✅ Polígono dibujado correctamente")
     
     # Calcular área aproximada (simulada)
     import random
@@ -241,10 +228,7 @@ if (st.session_state.current_polygon is not None and
     
     with st.spinner("Analizando fertilidad..."):
         # Simular análisis
-        analysis_result = simulate_fertility_analysis(
-            st.session_state.current_polygon, 
-            crop
-        )
+        analysis_result = simulate_fertility_analysis(crop)
     
     # Mostrar resultados
     st.markdown("---")
@@ -279,39 +263,50 @@ if (st.session_state.current_polygon is not None and
     
     # Botón de exportación
     st.markdown("---")
-    col1, col2, col3 = st.columns([1, 1, 1])
+    st.subheader("💾 Exportar Datos")
     
-    with col2:
-        if st.button("📥 Exportar GeoJSON", use_container_width=True):
-            geojson_data = export_geojson(st.session_state.current_polygon, crop)
-            
-            # Crear archivo temporal para descarga
-            geojson_str = json.dumps(geojson_data, indent=2)
-            
-            st.download_button(
-                label="Descargar GeoJSON",
-                data=geojson_str,
-                file_name=f"fertilidad_{crop}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson",
-                mime="application/json",
-                use_container_width=True
-            )
+    if st.button("📥 Exportar GeoJSON", key="export_btn"):
+        geojson_data = export_geojson(st.session_state.current_polygon, crop)
+        geojson_str = json.dumps(geojson_data, indent=2)
+        
+        st.download_button(
+            label="Descargar Archivo GeoJSON",
+            data=geojson_str,
+            file_name=f"fertilidad_{crop}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson",
+            mime="application/json",
+            use_container_width=True
+        )
     
     # Resetear el flag de análisis
     st.session_state.analyze_clicked = False
 
+# Mensaje si no hay polígono
+elif st.session_state.current_polygon is None:
+    st.info("ℹ️ Dibuja un polígono en el mapa para comenzar el análisis")
+
 # Información adicional
 with st.expander("ℹ️ Instrucciones de uso"):
     st.markdown("""
+    ### Cómo usar la aplicación:
+    
     1. **Selecciona un cultivo** en el panel lateral
     2. **Dibuja un polígono** en el mapa usando la herramienta de dibujo (ícono de polígono en la esquina superior izquierda)
     3. **Haz clic en 'Analizar'** para obtener los resultados de fertilidad
     4. **Exporta los datos** en formato GeoJSON si lo necesitas
     
-    **Características:**
+    ### Características:
     - Múltiples mapas base (ESRI Satélite, ESRI Topográfico, OpenStreetMap)
-    - Análisis de fertilidad por cultivo
-    - Exportación en formato GeoJSON
+    - Análisis de fertilidad por cultivo específico
+    - Exportación en formato GeoJSON estándar
     - Interfaz responsive y fácil de usar
+    - Compatible con dispositivos móviles
+    
+    ### Cultivos soportados:
+    - 🌾 Trigo
+    - 🌽 Maíz  
+    - 🫘 Soja
+    - 🌾 Sorgo
+    - 🌻 Girasol
     """)
 
 # Footer
