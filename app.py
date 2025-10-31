@@ -1,84 +1,155 @@
-from flask import Flask, render_template, request, jsonify, send_file
+import streamlit as st
 import json
-import os
-from datetime import datetime
 import tempfile
+import uuid
+from datetime import datetime
+import folium
+from streamlit_folium import st_folium
+from folium.plugins import Draw
 
-app = Flask(__name__)
+# Configuración de la página
+st.set_page_config(
+    page_title="Analizador de Fertilidad",
+    page_icon="🌱",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Título principal
+st.title("🌱 Analizador de Fertilidad")
+st.markdown("---")
 
-@app.route('/analyze', methods=['POST'])
-def analyze_fertility():
-    """Analizar fertilidad del polígono"""
-    try:
-        data = request.json
-        geojson = data.get('geojson')
-        crop = data.get('crop', 'trigo')
-        
-        # Análisis de fertilidad simplificado
-        analysis_result = simulate_fertility_analysis(geojson, crop)
-        
-        return jsonify({
-            'success': True,
-            'result': analysis_result
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+# Inicializar session state
+if 'drawn_polygons' not in st.session_state:
+    st.session_state.drawn_polygons = []
+if 'current_polygon' not in st.session_state:
+    st.session_state.current_polygon = None
 
-@app.route('/export', methods=['POST'])
-def export_geojson():
-    """Exportar GeoJSON como archivo descargable"""
-    try:
-        data = request.json
-        geojson = data.get('geojson')
-        crop = data.get('crop', 'trigo')
-        
-        # Crear archivo temporal
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.geojson', delete=False) as f:
-            # Añadir metadatos
-            geojson['properties'] = {
-                'export_date': datetime.now().isoformat(),
-                'crop': crop,
-                'analyzed_by': 'Analizador de Fertilidad'
-            }
-            json.dump(geojson, f, indent=2)
-            temp_path = f.name
-        
-        # Enviar archivo
-        filename = f"fertilidad_{crop}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
-        return send_file(temp_path, as_attachment=True, download_name=filename)
+# Sidebar para controles
+with st.sidebar:
+    st.header("Configuración")
     
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+    # Selección de cultivo
+    crop = st.selectbox(
+        "Selecciona el cultivo:",
+        ["Trigo", "Maíz", "Soja", "Sorgo", "Girasol"]
+    )
+    
+    # Selección de mapa base
+    base_map = st.selectbox(
+        "Mapa Base:",
+        ["ESRI Satélite", "ESRI Topográfico", "OpenStreetMap"]
+    )
+    
+    st.markdown("---")
+    st.header("Acciones")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Limpiar Mapa", use_container_width=True):
+            st.session_state.drawn_polygons = []
+            st.session_state.current_polygon = None
+            st.rerun()
+    
+    with col2:
+        if st.button("📊 Analizar", use_container_width=True, 
+                    disabled=st.session_state.current_polygon is None):
+            st.session_state.analyze_clicked = True
 
-def simulate_fertility_analysis(geojson, crop):
-    """Simular análisis de fertilidad basado en el polígono y cultivo"""
+# Función para crear el mapa
+def create_map(base_map_choice):
+    # Coordenadas iniciales (Argentina)
+    m = folium.Map(
+        location=[-34.6037, -58.3816],
+        zoom_start=13,
+        control_scale=True
+    )
+    
+    # Capas base
+    if base_map_choice == "ESRI Satélite":
+        folium.TileLayer(
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='ESRI Satélite',
+            overlay=False,
+            control=True
+        ).add_to(m)
+    elif base_map_choice == "ESRI Topográfico":
+        folium.TileLayer(
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='ESRI Topográfico',
+            overlay=False,
+            control=True
+        ).add_to(m)
+    else:  # OpenStreetMap
+        folium.TileLayer(
+            tiles='OpenStreetMap',
+            attr='OpenStreetMap',
+            name='OpenStreetMap',
+            overlay=False,
+            control=True
+        ).add_to(m)
+    
+    # Plugin de dibujo
+    draw_options = {
+        'position': 'topleft',
+        'draw': {
+            'polygon': {
+                'allowIntersection': False,
+                'showArea': True,
+                'shapeOptions': {
+                    'color': '#4CAF50',
+                    'fillColor': '#4CAF50',
+                    'fillOpacity': 0.2,
+                    'weight': 3
+                }
+            },
+            'polyline': False,
+            'rectangle': False,
+            'circle': False,
+            'marker': False,
+            'circlemarker': False
+        },
+        'edit': False
+    }
+    
+    draw = Draw(export=False, **draw_options)
+    draw.add_to(m)
+    
+    # Añadir polígonos existentes
+    for polygon in st.session_state.drawn_polygons:
+        folium.GeoJson(
+            polygon,
+            style_function=lambda x: {
+                'fillColor': '#4CAF50',
+                'color': '#4CAF50',
+                'weight': 3,
+                'fillOpacity': 0.2
+            }
+        ).add_to(m)
+    
+    return m
+
+# Función para simular análisis
+def simulate_fertility_analysis(polygon_data, crop):
     import random
     
     crop_requirements = {
-        'trigo': {'n': 'alto', 'p': 'medio', 'k': 'medio', 'ph_optimo': 6.0},
-        'maiz': {'n': 'muy_alto', 'p': 'alto', 'k': 'alto', 'ph_optimo': 6.5},
-        'soja': {'n': 'medio', 'p': 'alto', 'k': 'medio', 'ph_optimo': 6.8},
-        'sorgo': {'n': 'medio', 'p': 'medio', 'k': 'alto', 'ph_optimo': 6.2},
-        'girasol': {'n': 'bajo', 'p': 'medio', 'k': 'medio', 'ph_optimo': 6.5}
+        'Trigo': {'n': 'alto', 'p': 'medio', 'k': 'medio', 'ph_optimo': 6.0},
+        'Maíz': {'n': 'muy_alto', 'p': 'alto', 'k': 'alto', 'ph_optimo': 6.5},
+        'Soja': {'n': 'medio', 'p': 'alto', 'k': 'medio', 'ph_optimo': 6.8},
+        'Sorgo': {'n': 'medio', 'p': 'medio', 'k': 'alto', 'ph_optimo': 6.2},
+        'Girasol': {'n': 'bajo', 'p': 'medio', 'k': 'medio', 'ph_optimo': 6.5}
     }
     
-    # Calcular área aproximada (sin shapely)
-    area_hectares = calculate_area_approximate(geojson)
+    # Calcular área aproximada
+    area_hectares = round(random.uniform(5, 50), 2)
     
-    requirements = crop_requirements.get(crop, crop_requirements['trigo'])
+    requirements = crop_requirements.get(crop, crop_requirements['Trigo'])
     
     return {
-        'crop': crop,
+        'cultivo': crop,
         'area_hectareas': area_hectares,
         'parametros': {
             'nitrogeno': random.choice(['bajo', 'medio', 'alto']),
@@ -91,37 +162,29 @@ def simulate_fertility_analysis(geojson, crop):
         'recomendaciones': generar_recomendaciones(crop)
     }
 
-def calculate_area_approximate(geojson):
-    """Calcular área aproximada sin shapely"""
-    import random
-    # En una implementación real, aquí calcularías el área basado en las coordenadas
-    # Por ahora retornamos un valor aleatorio razonable
-    return round(random.uniform(5, 50), 2)
-
 def generar_recomendaciones(crop):
-    """Generar recomendaciones basadas en el cultivo"""
     recomendaciones = {
-        'trigo': [
+        'Trigo': [
             "Aplicar fertilizante nitrogenado en pre-siembra",
             "Mantener pH alrededor de 6.0",
             "Controlar niveles de fósforo"
         ],
-        'maiz': [
+        'Maíz': [
             "Alta demanda de nitrógeno - fertilizar adecuadamente",
             "Asegurar buen drenaje del suelo",
             "Mantener niveles altos de potasio"
         ],
-        'soja': [
+        'Soja': [
             "Inocular con rhizobium para fijación de nitrógeno",
             "Mantener niveles adecuados de fósforo",
             "Controlar pH para optimizar nodulación"
         ],
-        'sorgo': [
+        'Sorgo': [
             "Moderada demanda de nutrientes",
             "Tolerante a suelos más secos",
             "Mantener niveles de potasio"
         ],
-        'girasol': [
+        'Girasol': [
             "Baja demanda de nitrógeno",
             "Sensible a excesos de agua",
             "Mantener pH neutro"
@@ -129,5 +192,133 @@ def generar_recomendaciones(crop):
     }
     return recomendaciones.get(crop, [])
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+# Función para exportar GeoJSON
+def export_geojson(polygon_data, crop):
+    geojson = polygon_data.copy()
+    geojson['properties'] = {
+        'export_date': datetime.now().isoformat(),
+        'crop': crop,
+        'analyzed_by': 'Analizador de Fertilidad Streamlit'
+    }
+    return geojson
+
+# Crear y mostrar el mapa
+st.subheader("Mapa Interactivo")
+st.markdown("Dibuja un polígono en el mapa para analizar la fertilidad del suelo")
+
+# Crear el mapa
+m = create_map(base_map)
+
+# Mostrar el mapa y capturar interacciones
+map_data = st_folium(
+    m,
+    width=1200,
+    height=600,
+    returned_objects=["last_active_drawing"]
+)
+
+# Procesar polígono dibujado
+if map_data["last_active_drawing"]:
+    polygon_data = map_data["last_active_drawing"]
+    st.session_state.current_polygon = polygon_data
+    
+    # Añadir a la lista si no existe
+    if polygon_data not in st.session_state.drawn_polygons:
+        st.session_state.drawn_polygons.append(polygon_data)
+        
+    # Mostrar información del área
+    st.sidebar.success(f"✅ Polígono dibujado correctamente")
+    
+    # Calcular área aproximada (simulada)
+    import random
+    area_hectareas = round(random.uniform(5, 50), 2)
+    st.sidebar.info(f"**Área aproximada:** {area_hectareas} hectáreas")
+
+# Análisis de fertilidad
+if (st.session_state.current_polygon is not None and 
+    hasattr(st.session_state, 'analyze_clicked') and 
+    st.session_state.analyze_clicked):
+    
+    with st.spinner("Analizando fertilidad..."):
+        # Simular análisis
+        analysis_result = simulate_fertility_analysis(
+            st.session_state.current_polygon, 
+            crop
+        )
+    
+    # Mostrar resultados
+    st.markdown("---")
+    st.subheader("📊 Resultados del Análisis")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Información General**")
+        st.info(f"**Cultivo:** {analysis_result['cultivo']}")
+        st.info(f"**Área:** {analysis_result['area_hectareas']} hectáreas")
+        
+        st.markdown("**Parámetros del Suelo**")
+        parametros = analysis_result['parametros']
+        
+        # Mostrar parámetros con indicadores de color
+        for param, valor in parametros.items():
+            if param in ['nitrogeno', 'fosforo', 'potasio']:
+                if valor == 'bajo':
+                    st.error(f"**{param.title()}:** {valor} ❌")
+                elif valor == 'medio':
+                    st.warning(f"**{param.title()}:** {valor} ⚠️")
+                else:
+                    st.success(f"**{param.title()}:** {valor} ✅")
+            else:
+                st.info(f"**{param.title()}:** {valor}")
+    
+    with col2:
+        st.markdown("**Recomendaciones**")
+        for i, recomendacion in enumerate(analysis_result['recomendaciones'], 1):
+            st.write(f"{i}. {recomendacion}")
+    
+    # Botón de exportación
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
+    with col2:
+        if st.button("📥 Exportar GeoJSON", use_container_width=True):
+            geojson_data = export_geojson(st.session_state.current_polygon, crop)
+            
+            # Crear archivo temporal para descarga
+            geojson_str = json.dumps(geojson_data, indent=2)
+            
+            st.download_button(
+                label="Descargar GeoJSON",
+                data=geojson_str,
+                file_name=f"fertilidad_{crop}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson",
+                mime="application/json",
+                use_container_width=True
+            )
+    
+    # Resetear el flag de análisis
+    st.session_state.analyze_clicked = False
+
+# Información adicional
+with st.expander("ℹ️ Instrucciones de uso"):
+    st.markdown("""
+    1. **Selecciona un cultivo** en el panel lateral
+    2. **Dibuja un polígono** en el mapa usando la herramienta de dibujo (ícono de polígono en la esquina superior izquierda)
+    3. **Haz clic en 'Analizar'** para obtener los resultados de fertilidad
+    4. **Exporta los datos** en formato GeoJSON si lo necesitas
+    
+    **Características:**
+    - Múltiples mapas base (ESRI Satélite, ESRI Topográfico, OpenStreetMap)
+    - Análisis de fertilidad por cultivo
+    - Exportación en formato GeoJSON
+    - Interfaz responsive y fácil de usar
+    """)
+
+# Footer
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; color: gray;'>"
+    "Analizador de Fertilidad - Desarrollado con Streamlit 🌱"
+    "</div>",
+    unsafe_allow_html=True
+)
