@@ -4,3 +4,4 @@ shapely==2.0.1
 pandas==2.0.3
 numpy==1.24.3
 gunicorn==21.2.0
+markdown-it-py>=2.0.0
