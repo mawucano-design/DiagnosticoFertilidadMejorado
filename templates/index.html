@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analizador de Fertilidad - Trigo, Maíz, Soja, Sorgo, Girasol</title>
+    <title>Analizador de Fertilidad</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -46,20 +46,6 @@
             color: white;
             flex-direction: column;
         }
-        
-        .parameter-badge {
-            font-size: 0.8em;
-            padding: 4px 8px;
-        }
-        
-        .btn-group-vertical {
-            width: 100%;
-        }
-        
-        .results-section {
-            max-height: 300px;
-            overflow-y: auto;
-        }
     </style>
 </head>
 <body>
@@ -84,16 +70,16 @@
         
         <div class="btn-group-vertical gap-2 mb-3">
             <button id="draw-polygon" class="btn btn-primary">
-                <i class="bi bi-pencil"></i> Dibujar Polígono
+                ✏️ Dibujar Polígono
             </button>
             <button id="analyze" class="btn btn-success" disabled>
-                <i class="bi bi-graph-up"></i> Analizar Fertilidad
+                🔍 Analizar Fertilidad
             </button>
             <button id="export-geojson" class="btn btn-info" disabled>
-                <i class="bi bi-download"></i> Exportar GeoJSON
+                📥 Exportar GeoJSON
             </button>
             <button id="clear-all" class="btn btn-danger">
-                <i class="bi bi-trash"></i> Limpiar Mapa
+                🗑️ Limpiar Mapa
             </button>
         </div>
         
@@ -135,7 +121,7 @@
         // Configuración del mapa
         const map = L.map('map').setView([-34.6037, -58.3816], 13);
         
-        // Capas base
+        // Capas base ESRI
         const baseLayers = {
             'esri-imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
@@ -190,7 +176,7 @@
             drawnItems.addLayer(layer);
             currentPolygon = layer;
             
-            // Calcular área
+            // Calcular área con Turf.js
             const area = turf.area(layer.toGeoJSON());
             const areaHectares = (area / 10000).toFixed(2);
             
@@ -316,19 +302,19 @@
                 <h6 class="mt-3">Parámetros del Suelo:</h6>
                 <div class="row g-1 mb-3">
                     <div class="col-6">
-                        <span class="badge bg-${getBadgeColor(results.parametros.nitrogeno)} parameter-badge">N: ${results.parametros.nitrogeno}</span>
+                        <span class="badge bg-${getBadgeColor(results.parametros.nitrogeno)}">N: ${results.parametros.nitrogeno}</span>
                     </div>
                     <div class="col-6">
-                        <span class="badge bg-${getBadgeColor(results.parametros.fosforo)} parameter-badge">P: ${results.parametros.fosforo}</span>
+                        <span class="badge bg-${getBadgeColor(results.parametros.fosforo)}">P: ${results.parametros.fosforo}</span>
                     </div>
                     <div class="col-6">
-                        <span class="badge bg-${getBadgeColor(results.parametros.potasio)} parameter-badge">K: ${results.parametros.potasio}</span>
+                        <span class="badge bg-${getBadgeColor(results.parametros.potasio)}">K: ${results.parametros.potasio}</span>
                     </div>
                     <div class="col-6">
-                        <span class="badge bg-secondary parameter-badge">pH: ${results.parametros.ph}</span>
+                        <span class="badge bg-secondary">pH: ${results.parametros.ph}</span>
                     </div>
                     <div class="col-12">
-                        <span class="badge bg-dark parameter-badge">MO: ${results.parametros.materia_organica}%</span>
+                        <span class="badge bg-dark">MO: ${results.parametros.materia_organica}%</span>
                     </div>
                 </div>
                 
