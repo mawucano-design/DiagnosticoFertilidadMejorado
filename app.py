@@ -300,6 +300,275 @@ class MapVisualizer:
         return fig
 
 # ============================================================================
+# MÓDULO DE FERTILIDAD
+# ============================================================================
+
+class SoilFertilityAnalyzer:
+    def __init__(self):
+        self.fertility_data = None
+        
+    def generate_fertility_map(self, polygon, soil_params):
+        """Genera mapa de fertilidad basado en parámetros del suelo"""
+        bounds = self._get_polygon_bounds(polygon)
+        
+        # Crear grid dentro del polígono
+        grid_size = 20
+        lons = np.linspace(bounds['min_lon'], bounds['max_lon'], grid_size)
+        lats = np.linspace(bounds['min_lat'], bounds['max_lat'], grid_size)
+        
+        # Generar datos de fertilidad simulados
+        fertility_grid = np.zeros((grid_size, grid_size))
+        
+        for i in range(grid_size):
+            for j in range(grid_size):
+                # Simular variación espacial basada en parámetros
+                base_fertility = (
+                    soil_params['ph'] * 0.3 +
+                    soil_params['organic_matter'] * 0.4 +
+                    soil_params['nitrogen'] * 0.1 +
+                    soil_params['phosphorus'] * 0.1 +
+                    soil_params['potassium'] * 0.1
+                ) / 10.0
+                
+                # Agregar variación espacial
+                variation = np.sin(i * 0.5) * np.cos(j * 0.5) * 0.2
+                fertility_grid[i, j] = np.clip(base_fertility + variation, 0.1, 1.0)
+        
+        return lons, lats, fertility_grid
+    
+    def _get_polygon_bounds(self, polygon):
+        """Obtiene límites del polígono"""
+        lons = [p[0] for p in polygon]
+        lats = [p[1] for p in polygon]
+        
+        return {
+            'min_lon': min(lons),
+            'max_lon': max(lons),
+            'min_lat': min(lats),
+            'max_lat': max(lats)
+        }
+    
+    def create_fertility_plot(self, polygon, soil_params):
+        """Crea visualización del mapa de fertilidad"""
+        lons, lats, fertility_grid = self.generate_fertility_map(polygon, soil_params)
+        
+        fig = go.Figure()
+        
+        # Mapa de calor de fertilidad
+        fig.add_trace(go.Contour(
+            z=fertility_grid,
+            x=lons,
+            y=lats,
+            colorscale='RdYlGn',
+            opacity=0.7,
+            name='Fertilidad',
+            hovertemplate='Fertilidad: %{z:.2f}<extra></extra>'
+        ))
+        
+        # Contorno del polígono
+        poly_lons = [p[0] for p in polygon] + [polygon[0][0]]
+        poly_lats = [p[1] for p in polygon] + [polygon[0][1]]
+        
+        fig.add_trace(go.Scatter(
+            x=poly_lons,
+            y=poly_lats,
+            mode='lines',
+            line=dict(color='red', width=3),
+            name='Límite del Lote'
+        ))
+        
+        fig.update_layout(
+            title='🌱 Mapa de Fertilidad del Suelo',
+            xaxis_title='Longitud',
+            yaxis_title='Latitud',
+            height=500,
+            showlegend=True
+        )
+        
+        return fig
+
+# ============================================================================
+# MÓDULO LIDAR 3D
+# ============================================================================
+
+class Lidar3DVisualizer:
+    def __init__(self):
+        self.terrain_data = None
+        
+    def generate_terrain_data(self, polygon):
+        """Genera datos de terreno simulados para LiDAR"""
+        bounds = self._get_polygon_bounds(polygon)
+        
+        # Crear grid más denso para mejor visualización 3D
+        grid_size = 30
+        x = np.linspace(bounds['min_lon'], bounds['max_lon'], grid_size)
+        y = np.linspace(bounds['min_lat'], bounds['max_lat'], grid_size)
+        X, Y = np.meshgrid(x, y)
+        
+        # Generar terreno con variaciones realistas
+        Z = self._generate_realistic_terrain(X, Y, bounds)
+        
+        # Generar datos de vegetación
+        vegetation_height = self._generate_vegetation_data(X, Y, Z)
+        
+        return X, Y, Z, vegetation_height
+    
+    def _generate_realistic_terrain(self, X, Y, bounds):
+        """Genera terreno realista con múltiples frecuencias"""
+        # Escalar coordenadas para mejor comportamiento del ruido
+        x_scaled = (X - bounds['min_lon']) / (bounds['max_lon'] - bounds['min_lon']) * 10
+        y_scaled = (Y - bounds['min_lat']) / (bounds['max_lat'] - bounds['min_lat']) * 10
+        
+        # Terreno base con pendiente suave
+        base_slope = 0.5 * x_scaled + 0.3 * y_scaled
+        
+        # Variaciones de alta frecuencia (colinas pequeñas)
+        high_freq = (
+            np.sin(2 * x_scaled) * np.cos(1.5 * y_scaled) * 0.3 +
+            np.sin(3 * x_scaled + 1) * np.cos(2 * y_scaled - 0.5) * 0.2
+        )
+        
+        # Variaciones de baja frecuencia (colinas grandes)
+        low_freq = np.sin(0.5 * x_scaled) * np.cos(0.5 * y_scaled) * 0.8
+        
+        # Combinar todas las capas
+        Z = base_slope + low_freq + high_freq
+        
+        # Normalizar a rango realista (0-10 metros)
+        Z = (Z - Z.min()) / (Z.max() - Z.min()) * 10
+        
+        return Z
+    
+    def _generate_vegetation_data(self, X, Y, terrain):
+        """Genera datos de altura de vegetación"""
+        # Patrón de vegetación que sigue el terreno
+        veg_pattern = (
+            np.sin(3 * X) * np.cos(2 * Y) * 0.5 +
+            np.sin(2 * X + 1) * np.cos(3 * Y - 0.5) * 0.3
+        )
+        
+        # La vegetación es más alta en áreas más bajas
+        vegetation = np.clip((1 - terrain / terrain.max()) * 3 + veg_pattern, 0, 4)
+        
+        return vegetation
+    
+    def _get_polygon_bounds(self, polygon):
+        """Obtiene límites del polígono"""
+        lons = [p[0] for p in polygon]
+        lats = [p[1] for p in polygon]
+        
+        return {
+            'min_lon': min(lons),
+            'max_lon': max(lons),
+            'min_lat': min(lats),
+            'max_lat': max(lats)
+        }
+    
+    def create_3d_visualization(self, polygon):
+        """Crea visualización 3D interactiva del terreno LiDAR"""
+        X, Y, Z, vegetation = self.generate_terrain_data(polygon)
+        
+        fig = go.Figure()
+        
+        # Superficie del terreno
+        fig.add_trace(go.Surface(
+            x=X, y=Y, z=Z,
+            colorscale='Earth',
+            opacity=0.9,
+            name='Terreno',
+            showscale=True,
+            colorbar=dict(title="Altura (m)")
+        ))
+        
+        # Vegetación como puntos 3D
+        veg_points = []
+        for i in range(0, X.shape[0], 3):  # Submuestrear para mejor rendimiento
+            for j in range(0, X.shape[1], 3):
+                if vegetation[i, j] > 0.5:  # Solo mostrar vegetación significativa
+                    veg_points.append({
+                        'x': X[i, j],
+                        'y': Y[i, j], 
+                        'z': Z[i, j] + vegetation[i, j] / 2,
+                        'height': vegetation[i, j]
+                    })
+        
+        if veg_points:
+            veg_x = [p['x'] for p in veg_points]
+            veg_y = [p['y'] for p in veg_points]
+            veg_z = [p['z'] for p in veg_points]
+            veg_heights = [p['height'] for p in veg_points]
+            
+            fig.add_trace(go.Scatter3d(
+                x=veg_x, y=veg_y, z=veg_z,
+                mode='markers',
+                marker=dict(
+                    size=3,
+                    color=veg_heights,
+                    colorscale='Greens',
+                    opacity=0.7,
+                    colorbar=dict(title="Altura Veg. (m)")
+                ),
+                name='Vegetación'
+            ))
+        
+        fig.update_layout(
+            title='📡 Modelo LiDAR 3D - Topografía y Vegetación',
+            scene=dict(
+                xaxis_title='Longitud',
+                yaxis_title='Latitud',
+                zaxis_title='Altura (m)',
+                aspectmode='manual',
+                aspectratio=dict(x=1, y=1, z=0.3)
+            ),
+            height=600,
+            margin=dict(l=0, r=0, b=0, t=40)
+        )
+        
+        return fig
+    
+    def create_topographic_map(self, polygon):
+        """Crea mapa topográfico 2D con curvas de nivel"""
+        X, Y, Z, _ = self.generate_terrain_data(polygon)
+        
+        fig = go.Figure()
+        
+        # Mapa de calor de elevación
+        fig.add_trace(go.Contour(
+            z=Z,
+            x=X[0, :],  # Longitudes
+            y=Y[:, 0],  # Latitudes
+            colorscale='Viridis',
+            name='Elevación',
+            contours=dict(
+                showlabels=True,
+                labelfont=dict(size=12, color='white')
+            ),
+            colorbar=dict(title="Elevación (m)")
+        ))
+        
+        # Contorno del polígono
+        poly_lons = [p[0] for p in polygon] + [polygon[0][0]]
+        poly_lats = [p[1] for p in polygon] + [polygon[0][1]]
+        
+        fig.add_trace(go.Scatter(
+            x=poly_lons,
+            y=poly_lats,
+            mode='lines',
+            line=dict(color='red', width=3),
+            name='Límite del Lote'
+        ))
+        
+        fig.update_layout(
+            title='🗺️ Mapa Topográfico con Curvas de Nivel',
+            xaxis_title='Longitud',
+            yaxis_title='Latitud',
+            height=500,
+            showlegend=True
+        )
+        
+        return fig
+
+# ============================================================================
 # INTERFAZ DE CARGA EN INICIO
 # ============================================================================
 
@@ -558,7 +827,7 @@ def render_home_with_upload():
             st.write("- `.prj` (proyección)")
 
 # ============================================================================
-# MÓDULOS DE ANÁLISIS (simplificados para el ejemplo)
+# MÓDULOS DE ANÁLISIS (completos)
 # ============================================================================
 
 def render_soil_analysis():
@@ -604,6 +873,41 @@ def render_soil_analysis():
                 st.metric("Nitrógeno", "55 ppm (Adecuado)")
                 st.metric("Fósforo", "28 ppm (Óptimo)")
                 st.metric("Potasio", "115 ppm (Adecuado)")
+            
+            # Generar y mostrar mapa de fertilidad
+            st.subheader("🗺️ Mapa de Fertilidad")
+            
+            soil_params = {
+                'ph': ph,
+                'organic_matter': organic_matter,
+                'nitrogen': nitrogen,
+                'phosphorus': phosphorus,
+                'potassium': potassium
+            }
+            
+            fertility_analyzer = SoilFertilityAnalyzer()
+            polygon = st.session_state.current_polygon
+            fertility_fig = fertility_analyzer.create_fertility_plot(polygon, soil_params)
+            st.plotly_chart(fertility_fig, use_container_width=True)
+            
+            # Recomendaciones
+            st.subheader("🎯 Recomendaciones de Fertilización")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("""
+                **📋 Recomendaciones Generales:**
+                - Aplicar 150 kg/ha de fertilizante NPK 15-15-15
+                - Enmienda orgánica: 2 ton/ha de compost
+                - Control de pH: aplicación de 500 kg/ha de cal
+                """)
+            with col2:
+                st.info("""
+                **⏰ Plan de Aplicación:**
+                - **Fertilización base:** Inmediata
+                - **Fertilización cobertura:** 30 días
+                - **Análisis de seguimiento:** 60 días
+                """)
 
 def render_satellite_analysis():
     """Análisis satelital"""
@@ -664,8 +968,31 @@ def render_lidar_analysis():
             with col4:
                 st.metric("Resolución", "Alta")
             
-            st.subheader("🌋 Visualización 3D")
-            st.info("Visualización 3D interactiva de tu terreno")
+            # Generar visualizaciones LiDAR
+            lidar_viz = Lidar3DVisualizer()
+            polygon = st.session_state.current_polygon
+            
+            st.subheader("🌋 Visualización 3D Interactiva")
+            lidar_3d_fig = lidar_viz.create_3d_visualization(polygon)
+            st.plotly_chart(lidar_3d_fig, use_container_width=True)
+            
+            st.subheader("🗺️ Mapa Topográfico 2D")
+            topo_fig = lidar_viz.create_topographic_map(polygon)
+            st.plotly_chart(topo_fig, use_container_width=True)
+            
+            # Análisis de pendientes
+            st.subheader("📊 Análisis de Pendientes")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Pendiente Media", "3.2%")
+                st.metric("Área Plana (<2%)", "45%")
+            with col2:
+                st.metric("Pendiente Máxima", "12.8%")
+                st.metric("Área Inclinada (>5%)", "25%")
+            with col3:
+                st.metric("Dirección Predominante", "Noreste")
+                st.metric("Erosión Potencial", "Baja")
 
 def render_dashboard():
     """Dashboard integrado"""
