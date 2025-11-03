@@ -1,319 +1,264 @@
 import streamlit as st
-import json
-import tempfile
-from datetime import datetime
-import folium
-from streamlit_folium import st_folium
-from folium.plugins import Draw
+import pandas as pd
+import numpy as np
+from gemelos_digitales import lidar_processor, model_generator, visualizacion_3d
+from fertilidad import analisis_suelo, recomendaciones
+import os
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Analizador de Fertilidad",
+    page_title="Plataforma Agrícola Integral",
     page_icon="🌱",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Título principal
-st.title("🌱 Analizador de Fertilidad")
-st.markdown("---")
-
-# Inicializar session state
-if 'drawn_polygons' not in st.session_state:
-    st.session_state.drawn_polygons = []
-if 'current_polygon' not in st.session_state:
-    st.session_state.current_polygon = None
-
-# Sidebar para controles
-with st.sidebar:
-    st.header("Configuración")
+def show_home():
+    st.title("🌱 Plataforma de Agricultura de Precisión")
     
-    # Selección de cultivo
-    crop = st.selectbox(
-        "Selecciona el cultivo:",
-        ["Trigo", "Maíz", "Soja", "Sorgo", "Girasol"]
-    )
-    
-    # Selección de mapa base
-    base_map = st.selectbox(
-        "Mapa Base:",
-        ["ESRI Satélite", "ESRI Topográfico", "OpenStreetMap"]
-    )
-    
-    st.markdown("---")
-    st.header("Acciones")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 Limpiar Mapa", use_container_width=True):
-            st.session_state.drawn_polygons = []
-            st.session_state.current_polygon = None
-            st.rerun()
-    
-    with col2:
-        analyze_disabled = st.session_state.current_polygon is None
-        if st.button("📊 Analizar", use_container_width=True, disabled=analyze_disabled):
-            st.session_state.analyze_clicked = True
-
-# Función para crear el mapa
-def create_map(base_map_choice):
-    # Coordenadas iniciales (Argentina)
-    m = folium.Map(
-        location=[-34.6037, -58.3816],
-        zoom_start=13,
-        control_scale=True
-    )
-    
-    # Capas base
-    if base_map_choice == "ESRI Satélite":
-        folium.TileLayer(
-            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            attr='Esri',
-            name='ESRI Satélite',
-            overlay=False,
-            control=True
-        ).add_to(m)
-    elif base_map_choice == "ESRI Topográfico":
-        folium.TileLayer(
-            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-            attr='Esri',
-            name='ESRI Topográfico',
-            overlay=False,
-            control=True
-        ).add_to(m)
-    else:  # OpenStreetMap
-        folium.TileLayer(
-            tiles='OpenStreetMap',
-            attr='OpenStreetMap',
-            name='OpenStreetMap',
-            overlay=False,
-            control=True
-        ).add_to(m)
-    
-    # Plugin de dibujo
-    draw_options = {
-        'position': 'topleft',
-        'draw': {
-            'polygon': {
-                'allowIntersection': False,
-                'showArea': True,
-                'shapeOptions': {
-                    'color': '#4CAF50',
-                    'fillColor': '#4CAF50',
-                    'fillOpacity': 0.2,
-                    'weight': 3
-                }
-            },
-            'polyline': False,
-            'rectangle': False,
-            'circle': False,
-            'marker': False,
-            'circlemarker': False
-        },
-        'edit': False
-    }
-    
-    draw = Draw(export=False, **draw_options)
-    draw.add_to(m)
-    
-    return m
-
-# Función para simular análisis
-def simulate_fertility_analysis(crop):
-    import random
-    
-    crop_requirements = {
-        'Trigo': {'n': 'alto', 'p': 'medio', 'k': 'medio', 'ph_optimo': 6.0},
-        'Maíz': {'n': 'muy_alto', 'p': 'alto', 'k': 'alto', 'ph_optimo': 6.5},
-        'Soja': {'n': 'medio', 'p': 'alto', 'k': 'medio', 'ph_optimo': 6.8},
-        'Sorgo': {'n': 'medio', 'p': 'medio', 'k': 'alto', 'ph_optimo': 6.2},
-        'Girasol': {'n': 'bajo', 'p': 'medio', 'k': 'medio', 'ph_optimo': 6.5}
-    }
-    
-    # Calcular área aproximada
-    area_hectares = round(random.uniform(5, 50), 2)
-    
-    requirements = crop_requirements.get(crop, crop_requirements['Trigo'])
-    
-    return {
-        'cultivo': crop,
-        'area_hectareas': area_hectares,
-        'parametros': {
-            'nitrogeno': random.choice(['bajo', 'medio', 'alto']),
-            'fosforo': random.choice(['bajo', 'medio', 'alto']),
-            'potasio': random.choice(['bajo', 'medio', 'alto']),
-            'ph': round(random.uniform(5.0, 7.5), 1),
-            'materia_organica': round(random.uniform(1.0, 4.0), 1)
-        },
-        'requerimientos': requirements,
-        'recomendaciones': generar_recomendaciones(crop)
-    }
-
-def generar_recomendaciones(crop):
-    recomendaciones = {
-        'Trigo': [
-            "Aplicar fertilizante nitrogenado en pre-siembra",
-            "Mantener pH alrededor de 6.0",
-            "Controlar niveles de fósforo"
-        ],
-        'Maíz': [
-            "Alta demanda de nitrógeno - fertilizar adecuadamente",
-            "Asegurar buen drenaje del suelo",
-            "Mantener niveles altos de potasio"
-        ],
-        'Soja': [
-            "Inocular con rhizobium para fijación de nitrógeno",
-            "Mantener niveles adecuados de fósforo",
-            "Controlar pH para optimizar nodulación"
-        ],
-        'Sorgo': [
-            "Moderada demanda de nutrientes",
-            "Tolerante a suelos más secos",
-            "Mantener niveles de potasio"
-        ],
-        'Girasol': [
-            "Baja demanda de nitrógeno",
-            "Sensible a excesos de agua",
-            "Mantener pH neutro"
-        ]
-    }
-    return recomendaciones.get(crop, [])
-
-# Función para exportar GeoJSON
-def export_geojson(polygon_data, crop):
-    geojson = polygon_data.copy()
-    geojson['properties'] = {
-        'export_date': datetime.now().isoformat(),
-        'crop': crop,
-        'analyzed_by': 'Analizador de Fertilidad Streamlit'
-    }
-    return geojson
-
-# Crear y mostrar el mapa
-st.subheader("Mapa Interactivo")
-st.markdown("Dibuja un polígono en el mapa usando la herramienta de dibujo (ícono de polígono en la esquina superior izquierda)")
-
-# Crear el mapa
-m = create_map(base_map)
-
-# Mostrar el mapa y capturar interacciones
-map_data = st_folium(
-    m,
-    width=1200,
-    height=600,
-    returned_objects=["last_active_drawing"]
-)
-
-# Procesar polígono dibujado
-if map_data and map_data.get("last_active_drawing"):
-    polygon_data = map_data["last_active_drawing"]
-    st.session_state.current_polygon = polygon_data
-    
-    # Añadir a la lista si no existe
-    if polygon_data not in st.session_state.drawn_polygons:
-        st.session_state.drawn_polygons.append(polygon_data)
-        
-    # Mostrar información del área
-    st.sidebar.success("✅ Polígono dibujado correctamente")
-    
-    # Calcular área aproximada (simulada)
-    import random
-    area_hectareas = round(random.uniform(5, 50), 2)
-    st.sidebar.info(f"**Área aproximada:** {area_hectareas} hectáreas")
-
-# Análisis de fertilidad
-if (st.session_state.current_polygon is not None and 
-    hasattr(st.session_state, 'analyze_clicked') and 
-    st.session_state.analyze_clicked):
-    
-    with st.spinner("Analizando fertilidad..."):
-        # Simular análisis
-        analysis_result = simulate_fertility_analysis(crop)
-    
-    # Mostrar resultados
-    st.markdown("---")
-    st.subheader("📊 Resultados del Análisis")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Información General**")
-        st.info(f"**Cultivo:** {analysis_result['cultivo']}")
-        st.info(f"**Área:** {analysis_result['area_hectareas']} hectáreas")
-        
-        st.markdown("**Parámetros del Suelo**")
-        parametros = analysis_result['parametros']
-        
-        # Mostrar parámetros con indicadores de color
-        for param, valor in parametros.items():
-            if param in ['nitrogeno', 'fosforo', 'potasio']:
-                if valor == 'bajo':
-                    st.error(f"**{param.title()}:** {valor} ❌")
-                elif valor == 'medio':
-                    st.warning(f"**{param.title()}:** {valor} ⚠️")
-                else:
-                    st.success(f"**{param.title()}:** {valor} ✅")
-            else:
-                st.info(f"**{param.title()}:** {valor}")
-    
-    with col2:
-        st.markdown("**Recomendaciones**")
-        for i, recomendacion in enumerate(analysis_result['recomendaciones'], 1):
-            st.write(f"{i}. {recomendacion}")
-    
-    # Botón de exportación
-    st.markdown("---")
-    st.subheader("💾 Exportar Datos")
-    
-    if st.button("📥 Exportar GeoJSON", key="export_btn"):
-        geojson_data = export_geojson(st.session_state.current_polygon, crop)
-        geojson_str = json.dumps(geojson_data, indent=2)
-        
-        st.download_button(
-            label="Descargar Archivo GeoJSON",
-            data=geojson_str,
-            file_name=f"fertilidad_{crop}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson",
-            mime="application/json",
-            use_container_width=True
-        )
-    
-    # Resetear el flag de análisis
-    st.session_state.analyze_clicked = False
-
-# Mensaje si no hay polígono
-elif st.session_state.current_polygon is None:
-    st.info("ℹ️ Dibuja un polígono en el mapa para comenzar el análisis")
-
-# Información adicional
-with st.expander("ℹ️ Instrucciones de uso"):
     st.markdown("""
-    ### Cómo usar la aplicación:
+    ## Bienvenido a la Plataforma Agrícola Integral
     
-    1. **Selecciona un cultivo** en el panel lateral
-    2. **Dibuja un polígono** en el mapa usando la herramienta de dibujo (ícono de polígono en la esquina superior izquierda)
-    3. **Haz clic en 'Analizar'** para obtener los resultados de fertilidad
-    4. **Exporta los datos** en formato GeoJSON si lo necesitas
+    Esta plataforma combina **diagnóstico de fertilidad** del suelo con **gemelos digitales** 
+    basados en LiDAR para una agricultura de precisión completa.
     
-    ### Características:
-    - Múltiples mapas base (ESRI Satélite, ESRI Topográfico, OpenStreetMap)
-    - Análisis de fertilidad por cultivo específico
-    - Exportación en formato GeoJSON estándar
-    - Interfaz responsive y fácil de usar
-    - Compatible con dispositivos móviles
+    ### 🚀 Módulos Disponibles:
     
-    ### Cultivos soportados:
-    - 🌾 Trigo
-    - 🌽 Maíz  
-    - 🫘 Soja
-    - 🌾 Sorgo
-    - 🌻 Girasol
+    **🔍 Diagnóstico de Fertilidad**
+    - Análisis completo de suelo
+    - Recomendaciones de fertilización
+    - Historial de cultivos
+    
+    **🔄 Gemelos Digitales**
+    - Procesamiento de datos LiDAR
+    - Modelos 3D de cultivos
+    - Métricas de crecimiento y salud
+    
+    **📊 Dashboard Integrado**
+    - Vista unificada de todos los datos
+    - Correlación suelo-crecimiento
+    - Reportes automáticos
     """)
+    
+    # Métricas rápidas
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Precisión Análisis", "95%", "2%")
+    with col2:
+        st.metric Cultivos Analizados", "15", "3")
+    with col3:
+        st.metric("Eficiencia Mejorada", "30%", "5%")
 
-# Footer
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: gray;'>"
-    "Analizador de Fertilidad - Desarrollado con Streamlit 🌱"
-    "</div>",
-    unsafe_allow_html=True
-)
+def show_digital_twins():
+    st.title("🔄 Gemelos Digitales con LiDAR")
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["📤 Subir LiDAR", "⚙️ Procesamiento", "📊 Métricas", "🌐 Visualización 3D"])
+    
+    with tab1:
+        st.header("Carga de Datos LiDAR")
+        
+        uploaded_file = st.file_uploader(
+            "Subir archivo LiDAR (.las .laz)", 
+            type=['las', 'laz'],
+            help="Formatos soportados: LAS, LAZ"
+        )
+        
+        if uploaded_file:
+            # Guardar archivo temporalmente
+            with open("temp_upload.las", "wb") as f:
+                f.write(uploaded_file.getvalue())
+            
+            st.success(f"✅ Archivo {uploaded_file.name} subido correctamente")
+            
+            # Procesar LiDAR
+            with st.spinner("Procesando datos LiDAR..."):
+                processor = lidar_processor.LiDARProcessor()
+                point_cloud = processor.load_lidar("temp_upload.las")
+                
+                if point_cloud:
+                    st.session_state['point_cloud'] = point_cloud
+                    st.session_state['lidar_processed'] = True
+                    
+                    # Mostrar info básica
+                    points = np.asarray(point_cloud.points)
+                    st.info(f"**Puntos procesados:** {len(points):,}")
+                    
+    with tab2:
+        st.header("Procesamiento y Segmentación")
+        
+        if 'point_cloud' in st.session_state:
+            processor = lidar_processor.LiDARProcessor()
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Filtrado de Datos")
+                remove_outliers = st.checkbox("Remover outliers", value=True)
+                voxel_size = st.slider("Tamaño de voxel", 0.01, 0.5, 0.05)
+                
+                if st.button("Aplicar Procesamiento"):
+                    with st.spinner("Procesando..."):
+                        processed_cloud = processor.apply_advanced_processing(
+                            st.session_state['point_cloud'],
+                            remove_outliers=remove_outliers,
+                            voxel_size=voxel_size
+                        )
+                        st.session_state['processed_cloud'] = processed_cloud
+                        st.success("Procesamiento completado")
+            
+            with col2:
+                st.subheader("Segmentación")
+                if st.button("Segmentar Vegetación"):
+                    with st.spinner("Segmentando..."):
+                        vegetation = processor.segment_vegetation()
+                        if vegetation:
+                            st.session_state['vegetation_cloud'] = vegetation
+                            points_veg = np.asarray(vegetation.points)
+                            st.success(f"Vegetación segmentada: {len(points_veg):,} puntos")
+        else:
+            st.warning("⏳ Primero sube un archivo LiDAR en la pestaña 'Subir LiDAR'")
+    
+    with tab3:
+        st.header("Métricas y Análisis")
+        
+        if 'vegetation_cloud' in st.session_state:
+            metrics = model_generator.extract_plant_metrics(st.session_state['vegetation_cloud'])
+            
+            # Mostrar métricas
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Altura de Planta", f"{metrics.get('plant_height', 0):.2f} m")
+                st.metric("Densidad de Puntos", f"{metrics.get('plant_density', 0):,}")
+                
+            with col2:
+                st.metric("Volumen de Dosel", f"{metrics.get('canopy_volume', 0):.2f} m³")
+                st.metric("Área de Dosel", f"{metrics.get('canopy_area', 0):.2f} m²")
+                
+            with col3:
+                health_score = metrics.get('health_score', 0)
+                st.metric("Puntaje de Salud", f"{health_score:.1f}%")
+                st.metric("Etapa de Crecimiento", metrics.get('growth_stage', 'N/A'))
+            
+            # Análisis detallado
+            st.subheader("Análisis Detallado")
+            st.json(metrics)
+            
+        else:
+            st.info("👆 Realiza la segmentación de vegetación primero para ver las métricas")
+    
+    with tab4:
+        st.header("Visualización 3D Interactiva")
+        
+        if 'point_cloud' in st.session_state:
+            # Selector de nube de puntos a visualizar
+            cloud_options = {
+                "Original": st.session_state['point_cloud'],
+                "Procesada": st.session_state.get('processed_cloud', st.session_state['point_cloud']),
+                "Vegetación": st.session_state.get('vegetation_cloud', st.session_state['point_cloud'])
+            }
+            
+            selected_cloud = st.selectbox(
+                "Seleccionar nube de puntos para visualizar:",
+                list(cloud_options.keys())
+            )
+            
+            visualizacion_3d.create_interactive_plot(cloud_options[selected_cloud])
+        else:
+            st.warning("⏳ Sube un archivo LiDAR para ver la visualización 3D")
+
+def show_fertility_diagnosis():
+    st.title("🔍 Diagnóstico de Fertilidad del Suelo")
+    analisis_suelo.main()
+
+def show_integrated_dashboard():
+    st.title("📊 Dashboard Agrícola Integrado")
+    
+    # Verificar si tenemos datos de ambos módulos
+    has_fertility_data = 'soil_data' in st.session_state
+    has_lidar_data = 'vegetation_cloud' in st.session_state
+    
+    if not has_fertility_data and not has_lidar_data:
+        st.info("💡 Usa los módulos de Fertilidad y Gemelos Digitales para ver datos integrados aquí")
+        return
+    
+    # Layout del dashboard
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🏭 Diagnóstico de Suelo")
+        if has_fertility_data:
+            soil_data = st.session_state['soil_data']
+            st.metric("Fertilidad General", f"{soil_data.get('fertility_score', 0)}%")
+            st.metric("pH del Suelo", f"{soil_data.get('ph', 0)}")
+            st.metric("Materia Orgánica", f"{soil_data.get('organic_matter', 0):.1f}%")
+        else:
+            st.warning("Ejecuta el diagnóstico de fertilidad primero")
+    
+    with col2:
+        st.subheader("🌿 Estado del Cultivo (LiDAR)")
+        if has_lidar_data:
+            metrics = model_generator.extract_plant_metrics(st.session_state['vegetation_cloud'])
+            st.metric("Salud del Dosel", f"{metrics.get('health_score', 0):.1f}%")
+            st.metric("Crecimiento", f"{metrics.get('plant_height', 0):.2f} m")
+            st.metric("Densidad", f"{metrics.get('plant_density', 0):,} pts")
+        else:
+            st.warning("Procesa datos LiDAR primero")
+    
+    # Recomendaciones integradas
+    if has_fertility_data and has_lidar_data:
+        st.subheader("🎯 Recomendaciones Integradas")
+        
+        soil_data = st.session_state['soil_data']
+        lidar_metrics = model_generator.extract_plant_metrics(st.session_state['vegetation_cloud'])
+        
+        # Lógica de recomendación integrada
+        health_score = lidar_metrics.get('health_score', 0)
+        fertility_score = soil_data.get('fertility_score', 0)
+        
+        if health_score < 70 and fertility_score < 60:
+            st.error("**Acción Requerida:** Tanto la salud del cultivo como la fertilidad del suelo son bajas. Considera:")
+            st.write("- Aplicación de fertilizantes balanceados")
+            st.write("- Riego adecuado")
+            st.write("- Análisis de plagas y enfermedades")
+        elif health_score < 70:
+            st.warning("**Atención:** Salud del cultivo baja a pesar de buena fertilidad. Verifica:")
+            st.write("- Riego y drenaje")
+            st.write("- Presencia de plagas")
+            st.write("- Condiciones climáticas")
+        elif fertility_score < 60:
+            st.warning("**Atención:** Fertilidad del suelo baja. Considera enmiendas:")
+            st.write("- Aplicación de materia orgánica")
+            st.write("- Corrección de pH si es necesario")
+            st.write("- Fertilización específica")
+        else:
+            st.success("**✅ Estado Óptimo:** Cultivo y suelo en condiciones excelentes. Mantén las prácticas actuales.")
+
+def main():
+    st.sidebar.title("🌱 Plataforma Agrícola Integral")
+    st.sidebar.markdown("---")
+    
+    # Navegación unificada
+    app_mode = st.sidebar.selectbox(
+        "Seleccionar Módulo",
+        ["🏠 Inicio", "🔍 Diagnóstico Fertilidad", "🔄 Gemelos Digitales", "📊 Dashboard Integrado"]
+    )
+    
+    st.sidebar.markdown("---")
+    st.sidebar.info(
+        "Plataforma desarrollada para agricultura de precisión. "
+        "Combina análisis tradicional con tecnología LiDAR."
+    )
+    
+    # Navegación
+    if app_mode == "🏠 Inicio":
+        show_home()
+    elif app_mode == "🔍 Diagnóstico Fertilidad":
+        show_fertility_diagnosis()
+    elif app_mode == "🔄 Gemelos Digitales":
+        show_digital_twins()
+    elif app_mode == "📊 Dashboard Integrado":
+        show_integrated_dashboard()
+
+if __name__ == "__main__":
+    main()
