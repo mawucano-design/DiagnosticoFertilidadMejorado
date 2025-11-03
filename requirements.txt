@@ -1,5 +1,11 @@
-streamlit==1.28.0
-folium==0.14.0
-streamlit-folium==0.15.1
-pandas==2.2.0
-numpy==2.0.0
+streamlit>=1.28.0
+plotly>=5.15.0
+pandas>=1.5.0
+numpy>=1.21.0
+scikit-learn>=1.2.0
+open3d>=0.17.0
+laspy>=2.4.0
+pyntcloud>=0.1.5
+scipy>=1.10.0
+plotly>=5.15.0
+streamlit-3d-module>=0.1.0
