@@ -300,7 +300,7 @@ class MapVisualizer:
         return fig
 
 # ============================================================================
-# MÓDULO DE FERTILIDAD
+# MÓDULO DE FERTILIDAD MEJORADO
 # ============================================================================
 
 class SoilFertilityAnalyzer:
@@ -312,29 +312,55 @@ class SoilFertilityAnalyzer:
         bounds = self._get_polygon_bounds(polygon)
         
         # Crear grid dentro del polígono
-        grid_size = 20
+        grid_size = 50
         lons = np.linspace(bounds['min_lon'], bounds['max_lon'], grid_size)
         lats = np.linspace(bounds['min_lat'], bounds['max_lat'], grid_size)
         
-        # Generar datos de fertilidad simulados
+        # Generar datos de fertilidad simulados con variación realista
         fertility_grid = np.zeros((grid_size, grid_size))
         
         for i in range(grid_size):
             for j in range(grid_size):
-                # Simular variación espacial basada en parámetros
-                base_fertility = (
-                    soil_params['ph'] * 0.3 +
-                    soil_params['organic_matter'] * 0.4 +
-                    soil_params['nitrogen'] * 0.1 +
-                    soil_params['phosphorus'] * 0.1 +
-                    soil_params['potassium'] * 0.1
-                ) / 10.0
-                
-                # Agregar variación espacial
-                variation = np.sin(i * 0.5) * np.cos(j * 0.5) * 0.2
-                fertility_grid[i, j] = np.clip(base_fertility + variation, 0.1, 1.0)
+                # Verificar si el punto está dentro del polígono
+                if self._is_point_in_polygon(lons[j], lats[i], polygon):
+                    # Base de fertilidad basada en parámetros
+                    base_fertility = (
+                        (soil_params['ph'] - 4.0) / 5.0 * 0.3 +
+                        soil_params['organic_matter'] / 8.0 * 0.4 +
+                        soil_params['nitrogen'] / 200.0 * 0.1 +
+                        soil_params['phosphorus'] / 100.0 * 0.1 +
+                        soil_params['potassium'] / 300.0 * 0.1
+                    )
+                    
+                    # Agregar variación espacial más realista
+                    variation = (
+                        np.sin(i * 0.3) * np.cos(j * 0.3) * 0.15 +
+                        np.sin(i * 0.1) * np.cos(j * 0.1) * 0.1
+                    )
+                    fertility_grid[i, j] = np.clip(base_fertility + variation, 0.1, 1.0)
+                else:
+                    fertility_grid[i, j] = np.nan
         
         return lons, lats, fertility_grid
+    
+    def _is_point_in_polygon(self, x, y, polygon):
+        """Verifica si un punto está dentro del polígono"""
+        n = len(polygon)
+        inside = False
+        
+        p1x, p1y = polygon[0]
+        for i in range(1, n + 1):
+            p2x, p2y = polygon[i % n]
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+        
+        return inside
     
     def _get_polygon_bounds(self, polygon):
         """Obtiene límites del polígono"""
@@ -355,14 +381,15 @@ class SoilFertilityAnalyzer:
         fig = go.Figure()
         
         # Mapa de calor de fertilidad
-        fig.add_trace(go.Contour(
+        fig.add_trace(go.Heatmap(
             z=fertility_grid,
             x=lons,
             y=lats,
             colorscale='RdYlGn',
-            opacity=0.7,
+            opacity=0.8,
             name='Fertilidad',
-            hovertemplate='Fertilidad: %{z:.2f}<extra></extra>'
+            hovertemplate='Fertilidad: %{z:.2f}<extra></extra>',
+            colorbar=dict(title="Índice de Fertilidad")
         ))
         
         # Contorno del polígono
@@ -374,7 +401,9 @@ class SoilFertilityAnalyzer:
             y=poly_lats,
             mode='lines',
             line=dict(color='red', width=3),
-            name='Límite del Lote'
+            name='Límite del Lote',
+            fill='toself',
+            fillcolor='rgba(255,0,0,0.1)'
         ))
         
         fig.update_layout(
@@ -382,13 +411,125 @@ class SoilFertilityAnalyzer:
             xaxis_title='Longitud',
             yaxis_title='Latitud',
             height=500,
-            showlegend=True
+            showlegend=True,
+            template='plotly_white'
         )
         
         return fig
 
 # ============================================================================
-# MÓDULO LIDAR 3D
+# MÓDULO SATELITAL MEJORADO
+# ============================================================================
+
+class SatelliteAnalyzer:
+    def __init__(self):
+        self.ndvi_data = None
+        self.ndwi_data = None
+        
+    def generate_vegetation_map(self, polygon):
+        """Genera mapa de salud vegetal (NDVI)"""
+        bounds = self._get_polygon_bounds(polygon)
+        
+        grid_size = 50
+        lons = np.linspace(bounds['min_lon'], bounds['max_lon'], grid_size)
+        lats = np.linspace(bounds['min_lat'], bounds['max_lat'], grid_size)
+        
+        # Generar datos NDVI simulados
+        ndvi_grid = np.zeros((grid_size, grid_size))
+        
+        for i in range(grid_size):
+            for j in range(grid_size):
+                if self._is_point_in_polygon(lons[j], lats[i], polygon):
+                    # Simular patrones de vegetación realistas
+                    base_ndvi = 0.6 + np.random.normal(0, 0.1)
+                    
+                    # Agregar patrones espaciales
+                    pattern = (
+                        np.sin(i * 0.2) * np.cos(j * 0.2) * 0.15 +
+                        np.sin(i * 0.05) * np.cos(j * 0.05) * 0.1
+                    )
+                    ndvi_grid[i, j] = np.clip(base_ndvi + pattern, 0.1, 0.9)
+                else:
+                    ndvi_grid[i, j] = np.nan
+        
+        return lons, lats, ndvi_grid
+    
+    def _is_point_in_polygon(self, x, y, polygon):
+        """Verifica si un punto está dentro del polígono"""
+        n = len(polygon)
+        inside = False
+        
+        p1x, p1y = polygon[0]
+        for i in range(1, n + 1):
+            p2x, p2y = polygon[i % n]
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+        
+        return inside
+    
+    def _get_polygon_bounds(self, polygon):
+        """Obtiene límites del polígono"""
+        lons = [p[0] for p in polygon]
+        lats = [p[1] for p in polygon]
+        
+        return {
+            'min_lon': min(lons),
+            'max_lon': max(lons),
+            'min_lat': min(lats),
+            'max_lat': max(lats)
+        }
+    
+    def create_vegetation_plot(self, polygon):
+        """Crea visualización del mapa de salud vegetal"""
+        lons, lats, ndvi_grid = self.generate_vegetation_map(polygon)
+        
+        fig = go.Figure()
+        
+        # Mapa de calor NDVI
+        fig.add_trace(go.Heatmap(
+            z=ndvi_grid,
+            x=lons,
+            y=lats,
+            colorscale='RdYlGn',
+            opacity=0.8,
+            name='NDVI',
+            hovertemplate='NDVI: %{z:.2f}<extra></extra>',
+            colorbar=dict(title="NDVI")
+        ))
+        
+        # Contorno del polígono
+        poly_lons = [p[0] for p in polygon] + [polygon[0][0]]
+        poly_lats = [p[1] for p in polygon] + [polygon[0][1]]
+        
+        fig.add_trace(go.Scatter(
+            x=poly_lons,
+            y=poly_lats,
+            mode='lines',
+            line=dict(color='blue', width=3),
+            name='Límite del Lote',
+            fill='toself',
+            fillcolor='rgba(0,0,255,0.1)'
+        ))
+        
+        fig.update_layout(
+            title='🛰️ Mapa de Salud Vegetal (NDVI)',
+            xaxis_title='Longitud',
+            yaxis_title='Latitud',
+            height=500,
+            showlegend=True,
+            template='plotly_white'
+        )
+        
+        return fig
+
+# ============================================================================
+# MÓDULO LIDAR 3D MEJORADO
 # ============================================================================
 
 class Lidar3DVisualizer:
@@ -400,7 +541,7 @@ class Lidar3DVisualizer:
         bounds = self._get_polygon_bounds(polygon)
         
         # Crear grid más denso para mejor visualización 3D
-        grid_size = 30
+        grid_size = 40
         x = np.linspace(bounds['min_lon'], bounds['max_lon'], grid_size)
         y = np.linspace(bounds['min_lat'], bounds['max_lat'], grid_size)
         X, Y = np.meshgrid(x, y)
@@ -408,49 +549,33 @@ class Lidar3DVisualizer:
         # Generar terreno con variaciones realistas
         Z = self._generate_realistic_terrain(X, Y, bounds)
         
-        # Generar datos de vegetación
-        vegetation_height = self._generate_vegetation_data(X, Y, Z)
-        
-        return X, Y, Z, vegetation_height
+        return X, Y, Z
     
     def _generate_realistic_terrain(self, X, Y, bounds):
         """Genera terreno realista con múltiples frecuencias"""
-        # Escalar coordenadas para mejor comportamiento del ruido
-        x_scaled = (X - bounds['min_lon']) / (bounds['max_lon'] - bounds['min_lon']) * 10
-        y_scaled = (Y - bounds['min_lat']) / (bounds['max_lat'] - bounds['min_lat']) * 10
+        # Escalar coordenadas para mejor comportamiento
+        x_scaled = (X - bounds['min_lon']) / (bounds['max_lon'] - bounds['min_lon']) * 20
+        y_scaled = (Y - bounds['min_lat']) / (bounds['max_lat'] - bounds['min_lat']) * 20
         
         # Terreno base con pendiente suave
-        base_slope = 0.5 * x_scaled + 0.3 * y_scaled
+        base_slope = 0.3 * x_scaled + 0.2 * y_scaled
         
         # Variaciones de alta frecuencia (colinas pequeñas)
         high_freq = (
-            np.sin(2 * x_scaled) * np.cos(1.5 * y_scaled) * 0.3 +
-            np.sin(3 * x_scaled + 1) * np.cos(2 * y_scaled - 0.5) * 0.2
+            np.sin(1.5 * x_scaled) * np.cos(1.2 * y_scaled) * 0.4 +
+            np.sin(2.5 * x_scaled + 1) * np.cos(1.8 * y_scaled - 0.5) * 0.3
         )
         
         # Variaciones de baja frecuencia (colinas grandes)
-        low_freq = np.sin(0.5 * x_scaled) * np.cos(0.5 * y_scaled) * 0.8
+        low_freq = np.sin(0.8 * x_scaled) * np.cos(0.8 * y_scaled) * 1.2
         
         # Combinar todas las capas
         Z = base_slope + low_freq + high_freq
         
-        # Normalizar a rango realista (0-10 metros)
-        Z = (Z - Z.min()) / (Z.max() - Z.min()) * 10
+        # Normalizar a rango realista (0-15 metros)
+        Z = (Z - Z.min()) / (Z.max() - Z.min()) * 15
         
         return Z
-    
-    def _generate_vegetation_data(self, X, Y, terrain):
-        """Genera datos de altura de vegetación"""
-        # Patrón de vegetación que sigue el terreno
-        veg_pattern = (
-            np.sin(3 * X) * np.cos(2 * Y) * 0.5 +
-            np.sin(2 * X + 1) * np.cos(3 * Y - 0.5) * 0.3
-        )
-        
-        # La vegetación es más alta en áreas más bajas
-        vegetation = np.clip((1 - terrain / terrain.max()) * 3 + veg_pattern, 0, 4)
-        
-        return vegetation
     
     def _get_polygon_bounds(self, polygon):
         """Obtiene límites del polígono"""
@@ -466,110 +591,156 @@ class Lidar3DVisualizer:
     
     def create_3d_visualization(self, polygon):
         """Crea visualización 3D interactiva del terreno LiDAR"""
-        X, Y, Z, vegetation = self.generate_terrain_data(polygon)
+        X, Y, Z = self.generate_terrain_data(polygon)
         
         fig = go.Figure()
         
         # Superficie del terreno
         fig.add_trace(go.Surface(
             x=X, y=Y, z=Z,
-            colorscale='Earth',
+            colorscale='Viridis',
             opacity=0.9,
             name='Terreno',
             showscale=True,
             colorbar=dict(title="Altura (m)")
         ))
         
-        # Vegetación como puntos 3D
-        veg_points = []
-        for i in range(0, X.shape[0], 3):  # Submuestrear para mejor rendimiento
-            for j in range(0, X.shape[1], 3):
-                if vegetation[i, j] > 0.5:  # Solo mostrar vegetación significativa
-                    veg_points.append({
-                        'x': X[i, j],
-                        'y': Y[i, j], 
-                        'z': Z[i, j] + vegetation[i, j] / 2,
-                        'height': vegetation[i, j]
-                    })
-        
-        if veg_points:
-            veg_x = [p['x'] for p in veg_points]
-            veg_y = [p['y'] for p in veg_points]
-            veg_z = [p['z'] for p in veg_points]
-            veg_heights = [p['height'] for p in veg_points]
-            
-            fig.add_trace(go.Scatter3d(
-                x=veg_x, y=veg_y, z=veg_z,
-                mode='markers',
-                marker=dict(
-                    size=3,
-                    color=veg_heights,
-                    colorscale='Greens',
-                    opacity=0.7,
-                    colorbar=dict(title="Altura Veg. (m)")
-                ),
-                name='Vegetación'
-            ))
-        
         fig.update_layout(
-            title='📡 Modelo LiDAR 3D - Topografía y Vegetación',
+            title='📡 Modelo LiDAR 3D - Topografía del Terreno',
             scene=dict(
                 xaxis_title='Longitud',
                 yaxis_title='Latitud',
                 zaxis_title='Altura (m)',
                 aspectmode='manual',
-                aspectratio=dict(x=1, y=1, z=0.3)
+                aspectratio=dict(x=1, y=1, z=0.4),
+                camera=dict(
+                    eye=dict(x=1.5, y=1.5, z=1.5)
+                )
             ),
             height=600,
             margin=dict(l=0, r=0, b=0, t=40)
         )
         
         return fig
+
+# ============================================================================
+# DASHBOARD MEJORADO
+# ============================================================================
+
+class DashboardVisualizer:
+    def __init__(self):
+        pass
     
-    def create_topographic_map(self, polygon):
-        """Crea mapa topográfico 2D con curvas de nivel"""
-        X, Y, Z, _ = self.generate_terrain_data(polygon)
+    def create_soil_pie_chart(self):
+        """Crea gráfico de torta para composición del suelo"""
+        labels = ['Arcilla', 'Limo', 'Arena', 'Materia Orgánica']
+        values = [35, 25, 30, 10]
         
-        fig = go.Figure()
-        
-        # Mapa de calor de elevación
-        fig.add_trace(go.Contour(
-            z=Z,
-            x=X[0, :],  # Longitudes
-            y=Y[:, 0],  # Latitudes
-            colorscale='Viridis',
-            name='Elevación',
-            contours=dict(
-                showlabels=True,
-                labelfont=dict(size=12, color='white')
-            ),
-            colorbar=dict(title="Elevación (m)")
-        ))
-        
-        # Contorno del polígono
-        poly_lons = [p[0] for p in polygon] + [polygon[0][0]]
-        poly_lats = [p[1] for p in polygon] + [polygon[0][1]]
-        
-        fig.add_trace(go.Scatter(
-            x=poly_lons,
-            y=poly_lats,
-            mode='lines',
-            line=dict(color='red', width=3),
-            name='Límite del Lote'
-        ))
+        fig = go.Figure(data=[go.Pie(
+            labels=labels, 
+            values=values,
+            hole=0.4,
+            marker=dict(colors=['#8B4513', '#DEB887', '#F4A460', '#8FBC8F'])
+        )])
         
         fig.update_layout(
-            title='🗺️ Mapa Topográfico con Curvas de Nivel',
-            xaxis_title='Longitud',
-            yaxis_title='Latitud',
-            height=500,
-            showlegend=True
+            title='🧪 Composición del Suelo',
+            height=300
         )
         
         return fig
+    
+    def create_nutrient_bar_chart(self):
+        """Crea gráfico de barras para nutrientes"""
+        nutrients = ['Nitrógeno (N)', 'Fósforo (P)', 'Potasio (K)', 'Calcio (Ca)', 'Magnesio (Mg)']
+        current_levels = [45, 28, 65, 75, 35]
+        optimal_levels = [50, 30, 70, 80, 40]
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            name='Nivel Actual',
+            x=nutrients,
+            y=current_levels,
+            marker_color='lightblue'
+        ))
+        
+        fig.add_trace(go.Bar(
+            name='Nivel Óptimo',
+            x=nutrients,
+            y=optimal_levels,
+            marker_color='lightgreen',
+            opacity=0.6
+        ))
+        
+        fig.update_layout(
+            title='📊 Niveles de Nutrientes del Suelo',
+            barmode='group',
+            height=400,
+            xaxis_tickangle=-45
+        )
+        
+        return fig
+    
+    def create_vegetation_health_chart(self):
+        """Crea gráfico de salud vegetal"""
+        dates = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun']
+        ndvi = [0.45, 0.52, 0.68, 0.72, 0.75, 0.71]
+        ndwi = [-0.12, -0.08, -0.05, -0.02, 0.01, -0.03]
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            name='NDVI',
+            x=dates,
+            y=ndvi,
+            line=dict(color='green', width=3),
+            mode='lines+markers'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            name='NDWI',
+            x=dates,
+            y=ndwi,
+            line=dict(color='blue', width=3),
+            mode='lines+markers'
+        ))
+        
+        fig.update_layout(
+            title='🌿 Evolución de Salud Vegetal',
+            height=400,
+            xaxis_title='Mes',
+            yaxis_title='Índice'
+        )
+        
+        return fig
+    
+    def create_productivity_gauge(self):
+        """Crea medidor de productividad"""
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=78,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Productividad General"},
+            delta={'reference': 70},
+            gauge={
+                'axis': {'range': [None, 100]},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, 50], 'color': "lightgray"},
+                    {'range': [50, 80], 'color': "gray"}],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': 90}
+            }
+        ))
+        
+        fig.update_layout(height=300)
+        return fig
 
 # ============================================================================
-# INTERFAZ DE CARGA EN INICIO
+# INTERFAZ DE CARGA EN INICIO - CORREGIDA
 # ============================================================================
 
 def render_polygon_upload():
@@ -605,8 +776,7 @@ def render_polygon_upload():
     uploaded_file = st.file_uploader(
         "Selecciona tu archivo geográfico",
         type=['kml', 'kmz', 'geojson', 'json', 'zip'],
-        help="Puedes subir KML, GeoJSON o ZIP con Shapefile",
-        key="polygon_uploader_home"
+        help="Puedes subir KML, GeoJSON o ZIP con Shapefile"
     )
     
     polygon_processor = PolygonProcessor()
@@ -634,7 +804,7 @@ def render_polygon_upload():
                     file_type = "Shapefile"
                     st.success("📦 Procesando Shapefile...")
                 
-                if polygons:
+                if polygons and len(polygons) > 0:
                     current_polygon = polygons[0]
                     area_ha = polygon_processor.calculate_polygon_area(current_polygon)
                     bounds = polygon_processor.get_polygon_bounds(current_polygon)
@@ -779,55 +949,9 @@ def render_home_with_upload():
         
         # Sección de carga de polígonos
         render_polygon_upload()
-        
-        # Ejemplos de formatos
-        st.markdown("---")
-        st.subheader("📋 Ejemplos de Formatos")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.write("**Google Earth (KML)**")
-            st.code("""<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-<Placemark>
-  <Polygon>
-    <coordinates>
-      -58.500,-34.600,0
-      -58.400,-34.600,0
-      -58.400,-34.500,0
-      -58.500,-34.500,0
-    </coordinates>
-  </Polygon>
-</Placemark>
-</kml>""", language="xml")
-        
-        with col2:
-            st.write("**GeoJSON**")
-            st.code("""{
-  "type": "Feature",
-  "geometry": {
-    "type": "Polygon",
-    "coordinates": [[
-      [-58.500, -34.600],
-      [-58.400, -34.600],
-      [-58.400, -34.500],
-      [-58.500, -34.500],
-      [-58.500, -34.600]
-    ]]
-  }
-}""", language="json")
-        
-        with col3:
-            st.write("**Shapefile**")
-            st.write("Archivos necesarios en ZIP:")
-            st.write("- `.shp` (geometría)")
-            st.write("- `.shx` (índice)") 
-            st.write("- `.dbf` (atributos)")
-            st.write("- `.prj` (proyección)")
 
 # ============================================================================
-# MÓDULOS DE ANÁLISIS (completos)
+# MÓDULOS DE ANÁLISIS (completos y corregidos)
 # ============================================================================
 
 def render_soil_analysis():
@@ -927,17 +1051,34 @@ def render_satellite_analysis():
             # Mostrar resultados
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("NDVI - Salud Vegetal", "0.68", "Excelente")
+                st.metric("NDVI - Salud Vegetal", "0.68", "0.08")
             with col2:
-                st.metric("NDWI - Agua", "-0.12", "Óptimo")
+                st.metric("NDWI - Agua", "-0.12", "-0.03")
             with col3:
-                st.metric("EVI - Vegetación Densa", "0.45")
+                st.metric("EVI - Vegetación Densa", "0.45", "0.05")
             with col4:
-                st.metric("NDRE - Nutrientes", "0.28", "Óptimo")
+                st.metric("NDRE - Nutrientes", "0.28", "0.02")
             
-            # Mapa simulado
-            st.subheader("🗺️ Mapa de Salud Vegetal")
-            st.info("Mapa de NDVI generado para tu lote")
+            # Generar y mostrar mapa de salud vegetal
+            st.subheader("🗺️ Mapa de Salud Vegetal (NDVI)")
+            
+            satellite_analyzer = SatelliteAnalyzer()
+            polygon = st.session_state.current_polygon
+            vegetation_fig = satellite_analyzer.create_vegetation_plot(polygon)
+            st.plotly_chart(vegetation_fig, use_container_width=True)
+            
+            # Interpretación NDVI
+            st.subheader("📊 Interpretación del NDVI")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.info("**0.0 - 0.2**: Suelo desnudo")
+            with col2:
+                st.success("**0.2 - 0.5**: Vegetación escasa")
+            with col3:
+                st.success("**0.5 - 0.7**: Vegetación buena")
+            with col4:
+                st.success("**0.7 - 1.0**: Vegetación excelente")
 
 def render_lidar_analysis():
     """Análisis LiDAR"""
@@ -957,16 +1098,16 @@ def render_lidar_analysis():
             # Mostrar métricas
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Puntos Generados", "3,847")
-                st.metric("Altura Máxima", "2.8 m")
+                st.metric("Puntos Generados", "12,847")
+                st.metric("Altura Máxima", "8.2 m")
             with col2:
-                st.metric("Cobertura Vegetal", "72%")
-                st.metric("Altura Media Veg.", "1.5 m")
+                st.metric("Resolución", "0.5 m")
+                st.metric("Altura Mínima", "0.2 m")
             with col3:
-                st.metric("Puntos Terreno", "1,153")
-                st.metric("Altura Media", "0.8 m")
+                st.metric("Pendiente Media", "3.2%")
+                st.metric("Desnivel Total", "8.0 m")
             with col4:
-                st.metric("Resolución", "Alta")
+                st.metric("Calidad", "Alta")
             
             # Generar visualizaciones LiDAR
             lidar_viz = Lidar3DVisualizer()
@@ -975,10 +1116,6 @@ def render_lidar_analysis():
             st.subheader("🌋 Visualización 3D Interactiva")
             lidar_3d_fig = lidar_viz.create_3d_visualization(polygon)
             st.plotly_chart(lidar_3d_fig, use_container_width=True)
-            
-            st.subheader("🗺️ Mapa Topográfico 2D")
-            topo_fig = lidar_viz.create_topographic_map(polygon)
-            st.plotly_chart(topo_fig, use_container_width=True)
             
             # Análisis de pendientes
             st.subheader("📊 Análisis de Pendientes")
@@ -995,7 +1132,7 @@ def render_lidar_analysis():
                 st.metric("Erosión Potencial", "Baja")
 
 def render_dashboard():
-    """Dashboard integrado"""
+    """Dashboard integrado mejorado"""
     st.header("📊 Dashboard Integrado")
     
     if not st.session_state.get('polygon_loaded'):
@@ -1007,21 +1144,65 @@ def render_dashboard():
     # Métricas resumen
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Fertilidad Suelo", "78%")
+        st.metric("Fertilidad Suelo", "78%", "3%")
     with col2:
-        st.metric("Salud Vegetal", "85%")
+        st.metric("Salud Vegetal", "85%", "5%")
     with col3:
-        st.metric("Cobertura Vegetal", "72%")
+        st.metric("Cobertura Vegetal", "72%", "2%")
     with col4:
         st.metric("Área Total", f"{st.session_state.get('polygon_area_ha', 0):.1f} ha")
     
+    # Gráficos del dashboard
+    dashboard_viz = DashboardVisualizer()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Gráfico de torta - composición del suelo
+        pie_chart = dashboard_viz.create_soil_pie_chart()
+        st.plotly_chart(pie_chart, use_container_width=True)
+        
+        # Gráfico de evolución de salud vegetal
+        health_chart = dashboard_viz.create_vegetation_health_chart()
+        st.plotly_chart(health_chart, use_container_width=True)
+    
+    with col2:
+        # Gráfico de barras - nutrientes
+        bar_chart = dashboard_viz.create_nutrient_bar_chart()
+        st.plotly_chart(bar_chart, use_container_width=True)
+        
+        # Medidor de productividad
+        gauge_chart = dashboard_viz.create_productivity_gauge()
+        st.plotly_chart(gauge_chart, use_container_width=True)
+    
+    # Recomendaciones integradas
     st.subheader("🎯 Recomendaciones Integradas")
-    st.success("""
-    **✅ CONDICIONES GENERALES BUENAS**
-    - Suelo y vegetación en buen estado
-    - Mantener prácticas actuales de manejo
-    - Monitoreo preventivo recomendado
-    """)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.success("""
+        **🌱 SUELO**
+        - Fertilización balanceada requerida
+        - pH en rango óptimo
+        - Materia orgánica adecuada
+        """)
+    
+    with col2:
+        st.info("""
+        **💧 RIEGO**
+        - Eficiencia hídrica: 85%
+        - Programar riego por sectores
+        - Monitorear humedad
+        """)
+    
+    with col3:
+        st.warning("""
+        **📈 PRODUCTIVIDAD**
+        - Rendimiento esperado: 85%
+        - Áreas de mejora identificadas
+        - Seguimiento recomendado
+        """)
 
 # ============================================================================
 # FLUJO PRINCIPAL
