@@ -9,10 +9,6 @@ import json
 import xml.etree.ElementTree as ET
 from io import BytesIO
 import zipfile
-import requests
-from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 
 # CONFIGURACIÓN
 st.set_page_config(
@@ -340,187 +336,477 @@ class AdvancedSoilAnalyzer:
         else: return "Pobre"
 
 # ============================================================================
-# MÓDULO DE VISUALIZACIÓN MEJORADO
+# MÓDULO DE CARGA DE POLÍGONOS
 # ============================================================================
 
-def create_advanced_visualization(lidar_data, sentinel_data, soil_analysis):
-    """Crea visualizaciones integradas LiDAR + Sentinel-2"""
+class PolygonProcessor:
+    def __init__(self):
+        self.polygons = []
+        self.current_polygon = None
+        
+    def parse_kml(self, kml_content):
+        """Parsea archivo KML y extrae polígonos"""
+        try:
+            # Parsear KML
+            root = ET.fromstring(kml_content)
+            
+            # Namespace de KML
+            ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+            
+            polygons = []
+            
+            # Buscar polígonos en el KML
+            for polygon in root.findall('.//kml:Polygon', ns):
+                coordinates_elem = polygon.find('.//kml:coordinates', ns)
+                if coordinates_elem is not None:
+                    coords_text = coordinates_elem.text.strip()
+                    coordinates = []
+                    
+                    # Parsear coordenadas
+                    for line in coords_text.split():
+                        parts = line.split(',')
+                        if len(parts) >= 2:
+                            lon, lat = float(parts[0]), float(parts[1])
+                            coordinates.append([lon, lat])
+                    
+                    if coordinates:
+                        polygons.append(coordinates)
+            
+            return polygons
+            
+        except Exception as e:
+            st.error(f"Error parseando KML: {e}")
+            return []
     
-    fig = make_subplots(
-        rows=2, cols=2,
-        specs=[[{'type': 'scatter3d'}, {'type': 'xy'}],
-               [{'type': 'xy'}, {'type': 'xy'}]],
-        subplot_titles=(
-            'Modelo 3D LiDAR - Topografía y Vegetación',
-            'Análisis NDVI - Salud Vegetal',
-            'Análisis NDWI - Estrés Hídrico',
-            'Perfil de Fertilidad del Suelo'
-        )
+    def parse_geojson(self, geojson_content):
+        """Parsea archivo GeoJSON"""
+        try:
+            data = json.loads(geojson_content)
+            polygons = []
+            
+            if data['type'] == 'FeatureCollection':
+                for feature in data['features']:
+                    if feature['geometry']['type'] == 'Polygon':
+                        polygons.extend(feature['geometry']['coordinates'])
+            elif data['type'] == 'Feature':
+                if data['geometry']['type'] == 'Polygon':
+                    polygons.extend(data['geometry']['coordinates'])
+            elif data['type'] == 'Polygon':
+                polygons.extend(data['coordinates'])
+            
+            return polygons
+            
+        except Exception as e:
+            st.error(f"Error parseando GeoJSON: {e}")
+            return []
+    
+    def parse_shapefile_zip(self, zip_file):
+        """Simula parseo de shapefile (versión simplificada)"""
+        try:
+            # En una implementación real usarías fiona o geopandas
+            st.info("📦 Archivo shapefile detectado (procesamiento simulado)")
+            
+            # Crear polígono de ejemplo
+            polygon = [
+                [-58.500, -34.600],
+                [-58.400, -34.600],
+                [-58.400, -34.500],
+                [-58.500, -34.500],
+                [-58.500, -34.600]
+            ]
+            
+            return [polygon]
+            
+        except Exception as e:
+            st.error(f"Error procesando shapefile: {e}")
+            return []
+    
+    def calculate_polygon_area(self, polygon):
+        """Calcula área aproximada del polígono en hectáreas"""
+        try:
+            # Fórmula del área de Gauss
+            area = 0
+            n = len(polygon)
+            
+            for i in range(n):
+                j = (i + 1) % n
+                area += polygon[i][0] * polygon[j][1]
+                area -= polygon[j][0] * polygon[i][1]
+            
+            area = abs(area) / 2.0
+            
+            # Convertir a hectáreas (aproximación)
+            # 1 grado ≈ 111 km en latitud, varía en longitud
+            area_hectares = area * 111 * 111 * 100  # Conversión simplificada
+            
+            return max(area_hectares, 0.1)  # Mínimo 0.1 ha
+            
+        except:
+            return 10.0  # Valor por defecto
+
+# ============================================================================
+# MÓDULO LIDAR
+# ============================================================================
+
+class LiDARProcessor:
+    def __init__(self):
+        self.point_cloud = None
+        
+    def create_sample_data(self, polygon=None):
+        """Crea datos de ejemplo, opcionalmente dentro de un polígono"""
+        np.random.seed(42)
+        
+        if polygon:
+            # Usar el polígono para generar datos
+            polygon_processor = PolygonProcessor()
+            points = self._generate_points_in_polygon(polygon, 5000)
+            if points is not None:
+                self.point_cloud = type('PointCloud', (), {})()
+                self.point_cloud.points = points
+                return self.point_cloud
+        
+        # Datos de ejemplo por defecto
+        x = np.linspace(0, 10, 50)
+        y = np.linspace(0, 10, 50)
+        xx, yy = np.meshgrid(x, y)
+        z_ground = 0.1 * np.sin(xx) * np.cos(yy)
+        
+        plant_centers = [(3, 3), (7, 7), (5, 2), (2, 7), (8, 3)]
+        points = []
+        
+        for i in range(len(xx.flatten())):
+            points.append([xx.flatten()[i], yy.flatten()[i], z_ground.flatten()[i]])
+        
+        for center_x, center_y in plant_centers:
+            for _ in range(200):
+                dx, dy = np.random.normal(0, 0.5, 2)
+                height = np.random.uniform(0.5, 2.0)
+                z = 0.1 * np.sin(center_x) * np.cos(center_y) + height
+                points.append([center_x + dx, center_y + dy, z])
+        
+        points = np.array(points)
+        self.point_cloud = type('PointCloud', (), {})()
+        self.point_cloud.points = points
+        return self.point_cloud
+    
+    def _generate_points_in_polygon(self, polygon, num_points):
+        """Genera puntos dentro de un polígono"""
+        if not polygon:
+            return None
+            
+        # Calcular bounding box
+        lons = [p[0] for p in polygon]
+        lats = [p[1] for p in polygon]
+        
+        min_lon, max_lon = min(lons), max(lons)
+        min_lat, max_lat = min(lats), max(lats)
+        
+        points = []
+        while len(points) < num_points:
+            lon = np.random.uniform(min_lon, max_lon)
+            lat = np.random.uniform(min_lat, max_lat)
+            
+            # Verificación simple de punto en polígono
+            if self._point_in_polygon(lon, lat, polygon):
+                # Altura base + variación
+                base_height = np.random.uniform(0, 0.3)
+                # Algunos puntos son vegetación
+                if np.random.random() > 0.7:
+                    height = base_height + np.random.uniform(0.5, 2.5)
+                else:
+                    height = base_height
+                points.append([lon, lat, height])
+        
+        return np.array(points)
+    
+    def _point_in_polygon(self, x, y, poly):
+        """Verifica si un punto está dentro de un polígono"""
+        n = len(poly)
+        inside = False
+        
+        p1x, p1y = poly[0]
+        for i in range(n + 1):
+            p2x, p2y = poly[i % n]
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xints = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xints:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+        
+        return inside
+
+def extract_plant_metrics(point_cloud):
+    """Extrae métricas de vegetación"""
+    if point_cloud is None:
+        return {}
+    
+    points = point_cloud.points
+    
+    min_z = np.min(points[:, 2])
+    max_z = np.max(points[:, 2])
+    plant_height = max_z - min_z
+    
+    ground_level = np.percentile(points[:, 2], 10)
+    vegetation_mask = points[:, 2] > ground_level + 0.2
+    vegetation_points = points[vegetation_mask]
+    
+    # Calcular área aproximada
+    x_range = np.max(points[:, 0]) - np.min(points[:, 0])
+    y_range = np.max(points[:, 1]) - np.min(points[:, 1])
+    area_m2 = x_range * y_range
+    area_ha = area_m2 / 10000
+    
+    metrics = {
+        'plant_height': float(plant_height),
+        'canopy_volume': float(len(vegetation_points) * 0.001),
+        'plant_density': int(len(vegetation_points)),
+        'canopy_area': float(area_ha),
+        'health_score': float(min(100, len(vegetation_points) / max(1, len(points) / 100))),
+        'growth_stage': "Vegetativo" if plant_height > 1.0 else "Crecimiento",
+        'max_height': float(max_z),
+        'min_height': float(min_z),
+        'vegetation_points': len(vegetation_points),
+        'total_points': len(points),
+        'area_hectares': float(area_ha),
+        'vegetation_percentage': float(len(vegetation_points) / len(points) * 100)
+    }
+    
+    return metrics
+
+def create_interactive_plot(point_cloud, title="Visualización 3D - Datos LiDAR"):
+    """Crea visualización 3D interactiva"""
+    points = point_cloud.points
+    
+    fig = go.Figure()
+    
+    ground_level = np.percentile(points[:, 2], 10)
+    ground_mask = points[:, 2] <= ground_level + 0.2
+    vegetation_mask = points[:, 2] > ground_level + 0.2
+    
+    if np.any(ground_mask):
+        ground_points = points[ground_mask]
+        fig.add_trace(go.Scatter3d(
+            x=ground_points[:, 0],
+            y=ground_points[:, 1],
+            z=ground_points[:, 2],
+            mode='markers',
+            marker=dict(size=2, color='brown', opacity=0.6),
+            name='Terreno'
+        ))
+    
+    if np.any(vegetation_mask):
+        veg_points = points[vegetation_mask]
+        fig.add_trace(go.Scatter3d(
+            x=veg_points[:, 0],
+            y=veg_points[:, 1], 
+            z=veg_points[:, 2],
+            mode='markers',
+            marker=dict(
+                size=3, 
+                color=veg_points[:, 2], 
+                colorscale='Viridis',
+                opacity=0.8
+            ),
+            name='Vegetación'
+        ))
+    
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title='Longitud',
+            yaxis_title='Latitud',
+            zaxis_title='Altura (m)',
+            aspectmode='data'
+        ),
+        height=500
     )
     
-    # 1. Visualización 3D LiDAR
-    if lidar_data and hasattr(lidar_data, 'points'):
-        points = lidar_data.points
-        ground_level = np.percentile(points[:, 2], 10)
-        vegetation_mask = points[:, 2] > ground_level + 0.2
-        
-        # Terreno
-        ground_points = points[~vegetation_mask]
-        fig.add_trace(
-            go.Scatter3d(
-                x=ground_points[:, 0], y=ground_points[:, 1], z=ground_points[:, 2],
-                mode='markers', marker=dict(size=2, color='brown', opacity=0.6),
-                name='Terreno'
-            ), row=1, col=1
-        )
-        
-        # Vegetación
-        veg_points = points[vegetation_mask]
-        fig.add_trace(
-            go.Scatter3d(
-                x=veg_points[:, 0], y=veg_points[:, 1], z=veg_points[:, 2],
-                mode='markers', marker=dict(size=3, color='green', opacity=0.7),
-                name='Vegetación'
-            ), row=1, col=1
-        )
-    
-    # 2. Mapa de NDVI
-    if sentinel_data:
-        xx, yy = sentinel_data['coordinates']
-        ndvi = sentinel_data['ndvi']
-        
-        fig.add_trace(
-            go.Heatmap(
-                x=xx[0], y=yy[:, 0], z=ndvi,
-                colorscale='Viridis', name='NDVI',
-                colorbar=dict(title='NDVI')
-            ), row=1, col=2
-        )
-    
-    # 3. Mapa de NDWI
-    if sentinel_data:
-        ndwi = sentinel_data['ndwi']
-        fig.add_trace(
-            go.Heatmap(
-                x=xx[0], y=yy[:, 0], z=ndwi,
-                colorscale='Blues', name='NDWI',
-                colorbar=dict(title='NDWI')
-            ), row=2, col=1
-        )
-    
-    # 4. Perfil de fertilidad
-    if soil_analysis:
-        componentes = list(soil_analysis['component_scores'].keys())
-        puntajes = list(soil_analysis['component_scores'].values())
-        
-        fig.add_trace(
-            go.Bar(
-                x=componentes, y=puntajes,
-                marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'],
-                name='Puntajes'
-            ), row=2, col=2
-        )
-    
-    fig.update_layout(height=800, title_text="Dashboard Integrado de Análisis Agrícola")
-    return fig
+    st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================================
-# INTERFAZ PRINCIPAL MEJORADA
+# INTERFAZ PRINCIPAL
 # ============================================================================
 
-def render_advanced_analysis():
-    """Análisis integrado LiDAR + Sentinel-2 + Suelo"""
-    st.title("🔬 Análisis Integrado Avanzado")
+def render_home():
+    st.title("🌱 Plataforma de Agricultura de Precisión")
     
     st.markdown("""
-    **Análisis completo que combina:** 
-    - 🛰️ **Imágenes Sentinel-2** para salud vegetal
-    - 📡 **Datos LiDAR** para topografía 3D  
-    - 🌱 **Análisis de suelo** para fertilidad
-    - 💧 **Monitoreo hídrico** y nutricional
+    ## ¡Bienvenido a la Plataforma Agrícola Integral!
+    
+    **Combina diagnóstico de fertilidad con gemelos digitales LiDAR y análisis satelital**
+    
+    ### 🚀 Módulos Disponibles:
+    
+    **🌱 Análisis de Suelo Avanzado**
+    - Diagnóstico completo de fertilidad
+    - Recomendaciones de fertilización con costos
+    - Estimación de rendimientos
+    - Plan de manejo integrado
+    
+    **🔄 Gemelos Digitales LiDAR**  
+    - Carga de polígonos KML/GeoJSON/Shapefile
+    - Generación de datos LiDAR 3D
+    - Análisis topográfico y de vegetación
+    - Métricas espaciales precisas
+    
+    **🔬 Análisis Integrado**
+    - Combinación LiDAR + Sentinel-2
+    - Mapas de NDVI, NDWI, NDRE
+    - Salud vegetal y estrés hídrico
+    - Dashboard unificado
+    
+    **📊 Dashboard de Gestión**
+    - Vista consolidada de todos los datos
+    - Tendencias y correlaciones
+    - Decisiones basadas en datos
     """)
     
-    # Verificar datos disponibles
-    has_polygon = 'current_polygon' in st.session_state
-    has_lidar = 'point_cloud' in st.session_state
-    has_soil = 'soil_analysis' in st.session_state
+    st.info("""
+    **📈 Estado del Sistema:**
+    - ✅ Módulo Suelo: **Disponible** 
+    - ✅ Módulo LiDAR: **Disponible** 
+    - ✅ Análisis Satelital: **Disponible**
+    - ✅ Carga de polígonos: **Activa**
+    - 🟢 Sistema: **Operativo**
+    """)
+
+def render_polygon_upload():
+    """Interfaz para carga de polígonos"""
+    st.header("🗺️ Cargar Polígono de Análisis")
     
-    if not has_polygon:
-        st.warning("⚠️ Primero carga un polígono en el módulo LiDAR para realizar análisis avanzado")
-        return
+    uploaded_file = st.file_uploader(
+        "Seleccionar archivo geográfico (KML, GeoJSON, ZIP)",
+        type=['kml', 'kmz', 'geojson', 'json', 'zip'],
+        key="polygon_uploader"
+    )
     
-    # Generar datos Sentinel-2
-    if st.button("🛰️ Generar Análisis Satelital", key="generate_sentinel"):
-        with st.spinner("Generando análisis multiespectral..."):
-            sentinel_analyzer = SentinelAnalyzer()
-            sentinel_data = sentinel_analyzer.generate_sentinel_data(
-                st.session_state.current_polygon
-            )
-            vegetation_health = sentinel_analyzer.analyze_vegetation_health(sentinel_data)
+    polygon_processor = PolygonProcessor()
+    current_polygon = None
+    
+    if uploaded_file is not None:
+        file_content = uploaded_file.read()
+        
+        try:
+            if uploaded_file.type == "application/vnd.google-earth.kml+xml" or uploaded_file.name.endswith('.kml'):
+                polygons = polygon_processor.parse_kml(file_content)
+                st.success(f"✅ KML procesado: {len(polygons)} polígono(s) encontrado(s)")
+                
+            elif uploaded_file.type == "application/geo+json" or uploaded_file.name.endswith('.geojson') or uploaded_file.name.endswith('.json'):
+                polygons = polygon_processor.parse_geojson(file_content.decode('utf-8'))
+                st.success(f"✅ GeoJSON procesado: {len(polygons)} polígono(s) encontrado(s)")
+                
+            elif uploaded_file.type == "application/zip" or uploaded_file.name.endswith('.zip'):
+                polygons = polygon_processor.parse_shapefile_zip(file_content)
+                st.success(f"✅ Shapefile procesado: {len(polygons)} polígono(s) encontrado(s)")
             
-            st.session_state.sentinel_data = sentinel_data
-            st.session_state.vegetation_health = vegetation_health
-            st.success("✅ Análisis satelital completado")
+            if polygons:
+                current_polygon = polygons[0]
+                area_ha = polygon_processor.calculate_polygon_area(current_polygon)
+                
+                st.info(f"**📐 Área del polígono:** {area_ha:.2f} hectáreas")
+                
+                # Mostrar preview del polígono
+                st.subheader("📊 Vista previa del Polígono")
+                poly_df = pd.DataFrame(current_polygon, columns=['Longitud', 'Latitud'])
+                poly_df = pd.concat([poly_df, poly_df.iloc[[0]]])
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=poly_df['Longitud'],
+                    y=poly_df['Latitud'],
+                    fill='toself',
+                    fillcolor='rgba(0,100,80,0.2)',
+                    line=dict(color='rgba(0,100,80,1)'),
+                    name='Polígono'
+                ))
+                
+                fig.update_layout(
+                    title="Vista del Polígono Cargado",
+                    xaxis_title="Longitud",
+                    yaxis_title="Latitud",
+                    showlegend=False,
+                    height=400
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.session_state.current_polygon = current_polygon
+                st.session_state.polygon_area_ha = area_ha
+                
+        except Exception as e:
+            st.error(f"❌ Error procesando archivo: {e}")
     
-    # Mostrar resultados integrados
-    if 'sentinel_data' in st.session_state and 'vegetation_health' in st.session_state:
-        sentinel_data = st.session_state.sentinel_data
-        vegetation_health = st.session_state.vegetation_health
+    return current_polygon
+
+def render_lidar_page():
+    st.title("🔄 Gemelos Digitales LiDAR")
+    
+    tab1, tab2, tab3 = st.tabs(["🗺️ Polígono", "📤 Datos LiDAR", "📊 Métricas"])
+    
+    with tab1:
+        current_polygon = render_polygon_upload()
         
-        # Métricas principales
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Salud Vegetal", vegetation_health['health_status'])
-        with col2:
-            st.metric("NDVI Promedio", f"{vegetation_health['mean_ndvi']:.3f}")
-        with col3:
-            st.metric("Estrés Hídrico", vegetation_health['water_stress'])
-        with col4:
-            st.metric("Estado Nutricional", vegetation_health['nutrient_status'])
-        
-        # Visualización integrada
-        st.subheader("📊 Dashboard de Análisis Integrado")
-        soil_analysis = st.session_state.get('soil_analysis', None)
-        lidar_data = st.session_state.get('point_cloud', None)
-        
-        fig = create_advanced_visualization(lidar_data, sentinel_data, soil_analysis)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Recomendaciones integradas
-        st.subheader("🎯 Recomendaciones de Manejo Integrado")
-        
-        # Combinar recomendaciones de suelo y vegetación
-        soil_recs = st.session_state.get('soil_recommendations', [])
-        veg_health = vegetation_health['health_score']
-        
-        if veg_health < 60 and soil_recs:
-            st.error("""
-            **🔴 Atención Crítica Requerida:**
-            - Salud vegetal y suelo necesitan mejoras inmediatas
-            - Implementar las recomendaciones de fertilización
-            - Revisar sistema de riego y drenaje
-            - Considerar análisis de plagas y enfermedades
-            """)
-        elif veg_health < 70:
-            st.warning("""
-            **🟡 Monitoreo Intensivo Recomendado:**
-            - Salud vegetal moderada, requiere atención
-            - Implementar fertilización balanceada
-            - Monitorear evolución semanalmente
-            """)
+        if current_polygon:
+            st.success("✅ Polígono listo para generar datos LiDAR")
         else:
-            st.success("""
-            **✅ Condiciones Óptimas:**
-            - Salud vegetal y suelo en buen estado
-            - Mantener prácticas actuales de manejo
-            - Continuar monitoreo preventivo
-            """)
+            st.info("💡 Carga un polígono KML/GeoJSON/Shapefile para definir el área de análisis")
+    
+    with tab2:
+        st.header("Datos LiDAR")
         
-        # Plan de acción detallado
-        if soil_recs:
-            st.subheader("📋 Plan de Acción Detallado")
-            for i, rec in enumerate(soil_recs, 1):
-                st.write(f"{i}. **{rec['type']}**: {rec['producto']} - {rec['dosis']} ({rec['prioridad']})")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 Generar Datos en Polígono", key="generate_polygon_data"):
+                if 'current_polygon' in st.session_state:
+                    processor = LiDARProcessor()
+                    point_cloud = processor.create_sample_data(st.session_state.current_polygon)
+                    st.session_state.point_cloud = point_cloud
+                    st.success("✅ Datos LiDAR generados para el polígono")
+                else:
+                    st.warning("⚠️ Primero carga un polígono")
+            
+            if st.button("🔄 Generar Datos de Ejemplo", key="generate_sample_data"):
+                processor = LiDARProcessor()
+                point_cloud = processor.create_sample_data()
+                st.session_state.point_cloud = point_cloud
+                st.success("✅ Datos de ejemplo generados")
+        
+        with col2:
+            if 'point_cloud' in st.session_state:
+                points = st.session_state.point_cloud.points
+                st.success(f"✅ {len(points):,} puntos LiDAR cargados")
+                
+                if 'polygon_area_ha' in st.session_state:
+                    st.info(f"📐 Área de análisis: {st.session_state.polygon_area_ha:.2f} ha")
+    
+    with tab3:
+        st.header("Visualización y Métricas")
+        
+        if 'point_cloud' in st.session_state:
+            # Visualización
+            title = "Visualización LiDAR - Área Personalizada" if 'current_polygon' in st.session_state else "Visualización LiDAR - Datos de Ejemplo"
+            create_interactive_plot(st.session_state.point_cloud, title)
+            
+            # Métricas
+            metrics = extract_plant_metrics(st.session_state.point_cloud)
+            
+            st.subheader("📈 Métricas del Cultivo")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Altura Máxima", f"{metrics['max_height']:.2f} m")
+                st.metric("Densidad", f"{metrics['plant_density']:,} pts")
+            with col2:
+                st.metric("Volumen Dosel", f"{metrics['canopy_volume']:.1f} m³")
+                st.metric("Área", f"{metrics['canopy_area']:.2f} ha")
+            with col3:
+                st.metric("Salud", f"{metrics['health_score']:.1f}%")
+                st.metric("Etapa", metrics['growth_stage'])
+        else:
+            st.info("👆 Genera datos LiDAR primero para ver la visualización y métricas")
 
 def render_soil_analysis_main():
     """Módulo principal de análisis de suelo"""
@@ -633,14 +919,210 @@ def show_advanced_soil_results(analysis, area_ha):
     else:
         st.success("✅ No se requieren correcciones inmediatas. Mantener prácticas actuales.")
 
-# ============================================================================
-# INTERFAZ PRINCIPAL ACTUALIZADA
-# ============================================================================
+def render_advanced_analysis():
+    """Análisis integrado LiDAR + Sentinel-2 + Suelo"""
+    st.title("🔬 Análisis Integrado Avanzado")
+    
+    st.markdown("""
+    **Análisis completo que combina:** 
+    - 🛰️ **Imágenes Sentinel-2** para salud vegetal
+    - 📡 **Datos LiDAR** para topografía 3D  
+    - 🌱 **Análisis de suelo** para fertilidad
+    - 💧 **Monitoreo hídrico** y nutricional
+    """)
+    
+    # Verificar datos disponibles
+    has_polygon = 'current_polygon' in st.session_state
+    has_lidar = 'point_cloud' in st.session_state
+    has_soil = 'soil_analysis' in st.session_state
+    
+    if not has_polygon:
+        st.warning("⚠️ Primero carga un polígono en el módulo LiDAR para realizar análisis avanzado")
+        return
+    
+    # Generar datos Sentinel-2
+    if st.button("🛰️ Generar Análisis Satelital", key="generate_sentinel"):
+        with st.spinner("Generando análisis multiespectral..."):
+            sentinel_analyzer = SentinelAnalyzer()
+            sentinel_data = sentinel_analyzer.generate_sentinel_data(
+                st.session_state.current_polygon
+            )
+            vegetation_health = sentinel_analyzer.analyze_vegetation_health(sentinel_data)
+            
+            st.session_state.sentinel_data = sentinel_data
+            st.session_state.vegetation_health = vegetation_health
+            st.success("✅ Análisis satelital completado")
+    
+    # Mostrar resultados integrados
+    if 'sentinel_data' in st.session_state and 'vegetation_health' in st.session_state:
+        sentinel_data = st.session_state.sentinel_data
+        vegetation_health = st.session_state.vegetation_health
+        
+        # Métricas principales
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Salud Vegetal", vegetation_health['health_status'])
+        with col2:
+            st.metric("NDVI Promedio", f"{vegetation_health['mean_ndvi']:.3f}")
+        with col3:
+            st.metric("Estrés Hídrico", vegetation_health['water_stress'])
+        with col4:
+            st.metric("Estado Nutricional", vegetation_health['nutrient_status'])
+        
+        # Mapas de índices
+        st.subheader("🗺️ Mapas de Índices Espectrales")
+        
+        fig = make_subplots(
+            rows=1, cols=3,
+            subplot_titles=('NDVI - Salud Vegetal', 'NDWI - Estrés Hídrico', 'NDRE - Estado Nutricional'),
+            specs=[[{'type': 'heatmap'}, {'type': 'heatmap'}, {'type': 'heatmap'}]]
+        )
+        
+        xx, yy = sentinel_data['coordinates']
+        
+        # NDVI
+        fig.add_trace(
+            go.Heatmap(
+                x=xx[0], y=yy[:, 0], z=sentinel_data['ndvi'],
+                colorscale='Viridis', name='NDVI',
+                colorbar=dict(title='NDVI', x=0.3)
+            ), row=1, col=1
+        )
+        
+        # NDWI
+        fig.add_trace(
+            go.Heatmap(
+                x=xx[0], y=yy[:, 0], z=sentinel_data['ndwi'],
+                colorscale='Blues', name='NDWI',
+                colorbar=dict(title='NDWI', x=0.63)
+            ), row=1, col=2
+        )
+        
+        # NDRE
+        fig.add_trace(
+            go.Heatmap(
+                x=xx[0], y=yy[:, 0], z=sentinel_data['ndre'],
+                colorscale='Greens', name='NDRE',
+                colorbar=dict(title='NDRE', x=1.0)
+            ), row=1, col=3
+        )
+        
+        fig.update_layout(height=400, title_text="Análisis Multiespectral del Área")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Recomendaciones integradas
+        st.subheader("🎯 Recomendaciones de Manejo Integrado")
+        
+        soil_recs = st.session_state.get('soil_recommendations', [])
+        veg_health = vegetation_health['health_score']
+        
+        if veg_health < 60 and soil_recs:
+            st.error("""
+            **🔴 Atención Crítica Requerida:**
+            - Salud vegetal y suelo necesitan mejoras inmediatas
+            - Implementar las recomendaciones de fertilización
+            - Revisar sistema de riego y drenaje
+            - Considerar análisis de plagas y enfermedades
+            """)
+        elif veg_health < 70:
+            st.warning("""
+            **🟡 Monitoreo Intensivo Recomendado:**
+            - Salud vegetal moderada, requiere atención
+            - Implementar fertilización balanceada
+            - Monitorear evolución semanalmente
+            """)
+        else:
+            st.success("""
+            **✅ Condiciones Óptimas:**
+            - Salud vegetal y suelo en buen estado
+            - Mantener prácticas actuales de manejo
+            - Continuar monitoreo preventivo
+            """)
+        
+        # Plan de acción detallado
+        if soil_recs:
+            st.subheader("📋 Plan de Acción Detallado")
+            for i, rec in enumerate(soil_recs, 1):
+                st.write(f"{i}. **{rec['type']}**: {rec['producto']} - {rec['dosis']} ({rec['prioridad']})")
+
+def render_dashboard():
+    st.title("📊 Dashboard de Gestión")
+    
+    has_soil = 'soil_analysis' in st.session_state
+    has_lidar = 'point_cloud' in st.session_state
+    has_sentinel = 'vegetation_health' in st.session_state
+    
+    if not has_soil and not has_lidar and not has_sentinel:
+        st.info("💡 Usa los otros módulos para ver datos integrados aquí")
+        return
+    
+    # Resumen ejecutivo
+    st.header("📈 Resumen Ejecutivo")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if has_soil:
+            soil_score = st.session_state.soil_analysis['total_score']
+            st.metric("Fertilidad Suelo", f"{soil_score:.0f}%")
+        else:
+            st.metric("Fertilidad Suelo", "N/D")
+    
+    with col2:
+        if has_sentinel:
+            veg_health = st.session_state.vegetation_health['health_score']
+            st.metric("Salud Vegetal", f"{veg_health:.0f}%")
+        else:
+            st.metric("Salud Vegetal", "N/D")
+    
+    with col3:
+        if has_lidar:
+            metrics = extract_plant_metrics(st.session_state.point_cloud)
+            st.metric("Cobertura Vegetal", f"{metrics['vegetation_percentage']:.1f}%")
+        else:
+            st.metric("Cobertura Vegetal", "N/D")
+    
+    with col4:
+        if has_sentinel:
+            water_stress = st.session_state.vegetation_health['water_stress']
+            st.metric("Estrés Hídrico", water_stress)
+        else:
+            st.metric("Estrés Hídrico", "N/D")
+    
+    # Recomendaciones consolidadas
+    st.header("🎯 Recomendaciones Consolidadas")
+    
+    if has_soil and has_sentinel:
+        soil_score = st.session_state.soil_analysis['total_score']
+        veg_health = st.session_state.vegetation_health['health_score']
+        
+        if soil_score < 60 and veg_health < 60:
+            st.error("""
+            **🔴 INTERVENCIÓN INMEDIATA REQUERIDA**
+            - Suelo y cultivo en condiciones críticas
+            - Implementar plan de fertilización completo
+            - Evaluar sistema de riego y drenaje
+            - Considerar rotación de cultivos
+            """)
+        elif soil_score >= 70 and veg_health >= 70:
+            st.success("""
+            **✅ CONDICIONES ÓPTIMAS**
+            - Mantener prácticas actuales
+            - Continuar monitoreo preventivo
+            - Optimizar rentabilidad
+            """)
+        else:
+            st.warning("""
+            **🟡 MANEJO PRECISIO REQUERIDO**
+            - Algunos parámetros necesitan atención
+            - Aplicar fertilización específica
+            - Monitorear evolución
+            """)
 
 def main():
-    """Función principal con nueva estructura"""
+    """Función principal"""
     
-    # Sidebar con nueva organización
+    # Sidebar
     st.sidebar.title("🌱 Plataforma Agrícola Integral")
     st.sidebar.markdown("---")
     
@@ -672,8 +1154,6 @@ def main():
         render_advanced_analysis()
     elif page == "📊 Dashboard":
         render_dashboard()
-
-# (Los demás módulos como render_home, render_lidar_page, etc. se mantienen similares pero actualizados)
 
 if __name__ == "__main__":
     main()
