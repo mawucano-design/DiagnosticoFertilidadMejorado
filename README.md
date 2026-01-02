@@ -1,37 +1,57 @@
-# 🌱 Plataforma de Diagnóstico de Fertilidad y Gemelos Digitales
+# 🌱 Analizador Multi-Cultivo 
 
-Plataforma integral que combina diagnóstico de fertilidad del suelo con gemelos digitales basados en LiDAR para agricultura de precisión.
+> 🌴🍫🍌☕ Sistema de análisis satelital y geoespacial para **trigo, maiz, soja y girasol**
 
-## 🚀 Características Principales
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url)
 
-### 🔍 Módulo de Fertilidad
-- Análisis completo de parámetros del suelo
-- Recomendaciones de fertilización específicas
-- Diagnóstico integrado con puntuación
-- Planes de acción personalizados
+Este sistema permite a técnicos agrícolas, ingenieros y productores realizar un **diagnóstico integral de sus parcelas** utilizando **imágenes satelitales** (Sentinel-2, Landsat-8) y **análisis geoespacial avanzado**.
 
-### 🔄 Módulo de Gemelos Digitales
-- Procesamiento de datos LiDAR (.las, .laz)
-- Segmentación automática de vegetación
-- Generación de métricas 3D de cultivos
-- Visualización interactiva 3D
-- Modelado de gemelos digitales
+---
 
-### 📊 Dashboard Integrado
-- Correlación entre fertilidad y crecimiento
-- Recomendaciones unificadas
-- Monitoreo temporal
-- Reportes automáticos
+## 🚀 Funcionalidades
 
-## 🛠️ Instalación
+### 🌿 Análisis de Fertilidad y Nutrición
+- Evaluación del estado actual de **Nitrógeno (N), Fósforo (P) y Potasio (K)** mediante índices satelitales
+- Recomendaciones de fertilización **específicas por cultivo y zona de manejo**
+
+### 🏗️ Análisis de Textura del Suelo
+- Clasificación geoespacial de la textura (arena, limo, arcilla)
+- Recomendaciones de manejo según tipo de suelo
+
+### 🗻 Análisis Topográfico (Curvas de Nivel)
+- Generación de **mapas de calor de pendientes**
+- Evaluación de **riesgo de erosión** en función de la pendiente
+- Visualización 3D del terreno
+
+### 📊 Exportación de Resultados
+- **PDF y DOCX**: Reportes técnicos detallados con mapas, estadísticas y recomendaciones
+- **GeoJSON**: Exportación de zonas de manejo para SIG
+- **CSV**: Datos tabulados para análisis adicional
+
+---
+
+## 🌍 Cultivos Soportados
+
+| Cultivo | Icono | Características |
+|--------|-------|-----------------|
+| **Palma aceitera** | 🌴 | Alto requerimiento de K, sensible a encharcamientos |
+| **Cacao** | 🍫 | Requiere sombra y alta materia orgánica, sistema radicular superficial |
+| **Banano** | 🍌 | Alta demanda de N y K, sensible a anegamiento |
+| **Café** | ☕ | Cultivo de montaña, requiere pendientes manejables y pH ácido |
+
+---
+
+## 📥 Formatos de Entrada
+
+- **Shapefile** (`.zip`): Archivo comprimido con `.shp`, `.shx`, `.dbf`
+- **KML** (`.kml`): Formato de Google Earth
+- **KMZ** (`.kmz`): Versión comprimida de KML
+
+> **Recomendación**: Usar coordenadas **EPSG:4326 (WGS84)** para mejores resultados
+
+---
+
+## 🛠️ Requisitos
 
 ```bash
-# Clonar repositorio
-git clone https://github.com/mawucano-design/DiagnosticoFertilidadMejorado
-cd DiagnosticoFertilidadMejorado
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Ejecutar aplicación
-streamlit run app.py
+pip install streamlit geopandas pandas numpy matplotlib fpdf python-docx geojson
