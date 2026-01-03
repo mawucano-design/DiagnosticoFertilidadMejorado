@@ -2032,7 +2032,7 @@ def mostrar_resultados_textura(gdf_analizado, cultivo, area_total):
     st.subheader("🗺️ MAPA DE TEXTURAS CON ESRI SATELLITE")
     mapa_texturas = crear_mapa_texturas_con_esri(gdf_analizado, cultivo)
     if mapa_texturas:
-        st.image(mapa_texturas, use_container_width=True)
+       st.image(mapa_texturas)
         st.download_button(
             "📥 Descargar Mapa de Texturas",
             mapa_texturas,
@@ -2096,7 +2096,7 @@ def mostrar_resultados_curvas_nivel(X, Y, Z, pendiente_grid, curvas, elevaciones
             num_curvas = len(curvas) if curvas else 0
             st.metric("🔄 Número de Curvas", f"{num_curvas}")
     st.subheader("🔥 MAPA DE CALOR DE PENDIENTES")
-    st.image(mapa_pendientes, use_container_width=True)
+    st.image(mapa_pendientes)
     st.download_button(
         "📥 Descargar Mapa de Pendientes",
         mapa_pendientes,
@@ -2306,7 +2306,7 @@ if uploaded_file:
                             st.subheader("🗺️ MAPAS DE NPK CON ESRI SATELLITE")
                             mapa_fertilidad = crear_mapa_fertilidad_integrada(gdf_analizado, cultivo, satelite_seleccionado)
                             if mapa_fertilidad:
-                                st.image(mapa_fertilidad, use_container_width=True)
+                               st.image(mapa_fertilidad)
                                 st.download_button(
                                     "📥 Descargar Mapa de Fertilidad",
                                     mapa_fertilidad,
@@ -2317,15 +2317,15 @@ if uploaded_file:
                             with tab_n:
                                 mapa_n = crear_mapa_npk_con_esri(gdf_analizado, "NITRÓGENO", cultivo, satelite_seleccionado)
                                 if mapa_n:
-                                    st.image(mapa_n, use_container_width=True)
+                                    st.image(mapa_n)
                             with tab_p:
                                 mapa_p = crear_mapa_npk_con_esri(gdf_analizado, "FÓSFORO", cultivo, satelite_seleccionado)
                                 if mapa_p:
-                                    st.image(mapa_p, use_container_width=True)
+                                    st.image(mapa_p)
                             with tab_k:
                                 mapa_k = crear_mapa_npk_con_esri(gdf_analizado, "POTASIO", cultivo, satelite_seleccionado)
                                 if mapa_k:
-                                    st.image(mapa_k, use_container_width=True)
+                                    st.image(mapa_k)
                             st.subheader("🔬 ÍNDICES SATELITALES Y NPK POR ZONA")
                             columnas_indices = ['id_zona', 'npk_integrado', 'nitrogeno_actual', 'fosforo_actual', 'potasio_actual']
                             columnas_indices.extend(['materia_organica', 'ndvi', 'ndre', 'humedad_suelo', 'ndwi'])
