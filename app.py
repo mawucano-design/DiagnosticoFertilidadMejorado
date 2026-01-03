@@ -1060,7 +1060,7 @@ def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
         data = response.json()
         
         # ✅ CORREGIDO: sintaxis completa
-        if 'properties' not in 
+        if 'properties' not in data or 'parameter' not in data['properties']:
             st.warning("⚠️ No se obtuvieron datos de NASA POWER (fuera de rango o sin conexión).")
             return None
         
@@ -1988,9 +1988,8 @@ def ejecutar_analisis(gdf, nutriente, analisis_tipo, n_divisiones, cultivo,
             resultados['gdf_analizado'] = gdf_analizado
             resultados['exitoso'] = True
             if satelite:
-                df_power = obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin)
-                if df_power is not None:
-                    resultados['df_power'] = df_power
+                # Para el demo, no cargamos datos de NASA POWER para evitar errores de conexión
+                resultados['df_power'] = None
             return resultados
         else:
             st.error(f"Tipo de análisis no soportado: {analisis_tipo}")
@@ -2370,7 +2369,7 @@ if 'resultados_guardados' in st.session_state:
     with col_exp1:
         if st.button("🗺️ Exportar GeoJSON", key="export_geojson"):
             geojson_data, nombre_archivo = exportar_a_geojson(res['gdf_analizado'], f"parcela_{res['cultivo']}")
-            if geojson_
+            if geojson_data:
                 st.download_button(
                     label="📥 Descargar GeoJSON",
                     data=geojson_data,
