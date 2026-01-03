@@ -371,8 +371,8 @@ if not st.session_state.es_admin and st.session_state.analisis_realizados >= 2:
     st.error("🔒 Has alcanzado el límite de la versión DEMO (2 análisis).")
 
     st.info("""
-    💡 **¿Quieres analizar todo tu campo sin límites?**  
-    La versión completa incluye:
+    💡 **¿Quieres analizar tu campo o lote con tecnologia satelital?**  
+    El asesoramiento tecnico incluye:
     - 📊 **Recomendaciones NPK personalizadas** (dosis por zona)
     - 🗺️ **Análisis topográfico**: curvas de nivel, pendientes y riesgo de erosión  
     - 🌱 **Interpretación satelital avanzada** con meteorología integrada  
