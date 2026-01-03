@@ -1993,7 +1993,6 @@ def ejecutar_analisis(gdf, nutriente, analisis_tipo, n_divisiones, cultivo,
         st.error(f"Detalle: {traceback.format_exc()}")
         return resultados
 
-# ===== FUNCIONES DE VISUALIZACIÓN =====
 def mostrar_resultados_textura(gdf_analizado, cultivo, area_total):
     st.subheader("📊 ESTADÍSTICAS DE TEXTURA (USDA)")
     col1, col2, col3, col4 = st.columns(4)
@@ -2032,7 +2031,7 @@ def mostrar_resultados_textura(gdf_analizado, cultivo, area_total):
     st.subheader("🗺️ MAPA DE TEXTURAS CON ESRI SATELLITE")
     mapa_texturas = crear_mapa_texturas_con_esri(gdf_analizado, cultivo)
     if mapa_texturas:
-       st.image(mapa_texturas)
+        st.image(mapa_texturas)
         st.download_button(
             "📥 Descargar Mapa de Texturas",
             mapa_texturas,
@@ -2303,10 +2302,10 @@ if uploaded_file:
                                     st.metric("💨 Viento a 2m", f"{df_power['viento_2m'].mean():.2f} m/s")
                                 with col7:
                                     st.metric("💧 NDWI Promedio", f"{gdf_analizado['ndwi'].mean():.3f}")
-                            st.subheader("🗺️ MAPAS DE NPK CON ESRI SATELLITE")
+                                                       st.subheader("🗺️ MAPAS DE NPK CON ESRI SATELLITE")
                             mapa_fertilidad = crear_mapa_fertilidad_integrada(gdf_analizado, cultivo, satelite_seleccionado)
                             if mapa_fertilidad:
-                               st.image(mapa_fertilidad)
+                                st.image(mapa_fertilidad)
                                 st.download_button(
                                     "📥 Descargar Mapa de Fertilidad",
                                     mapa_fertilidad,
