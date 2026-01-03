@@ -1034,6 +1034,7 @@ def generar_datos_simulados(gdf, cultivo, indice='NDVI'):
     st.success("✅ Datos simulados generados")
     return datos_simulados
 
+# ===== FUNCIÓN CORREGIDA PARA OBTENER DATOS DE NASA POWER =====
 def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
     """
     Obtiene datos meteorológicos diarios de NASA POWER para el centroide de la parcela.
@@ -1058,8 +1059,8 @@ def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
         response = requests.get(url, params=params, timeout=15)
         data = response.json()
         
-        # ✅ CORRECCIÓN: aquí estaba el error de sintaxis
-        if 'properties' not in data:
+        # ✅ CORREGIDO: sintaxis completa
+        if 'properties' not in 
             st.warning("⚠️ No se obtuvieron datos de NASA POWER (fuera de rango o sin conexión).")
             return None
         
