@@ -1034,8 +1034,11 @@ def generar_datos_simulados(gdf, cultivo, indice='NDVI'):
     st.success("✅ Datos simulados generados")
     return datos_simulados
 
-# ===== FUNCIÓN CORREGIDA PARA OBTENER DATOS DE NASA POWER =====
 def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
+    """
+    Obtiene datos meteorológicos diarios de NASA POWER para el centroide de la parcela.
+    Variables: radiación solar (ALLSKY_SFC_SW_DWN), viento a 2m (WS2M), temperatura (T2M), precipitación (PRECTOTCORR).
+    """
     try:
         centroid = gdf.geometry.unary_union.centroid
         lat = round(centroid.y, 4)
@@ -1054,9 +1057,12 @@ def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
         url = "https://power.larc.nasa.gov/api/temporal/daily/point"
         response = requests.get(url, params=params, timeout=15)
         data = response.json()
-        if 'properties' not in 
+        
+        # ✅ CORRECCIÓN: aquí estaba el error de sintaxis
+        if 'properties' not in data:
             st.warning("⚠️ No se obtuvieron datos de NASA POWER (fuera de rango o sin conexión).")
             return None
+        
         series = data['properties']['parameter']
         df_power = pd.DataFrame({
             'fecha': pd.to_datetime(list(series['ALLSKY_SFC_SW_DWN'].keys())),
