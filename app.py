@@ -345,12 +345,6 @@ PALETAS_GEE = {
     'ELEVACION': ['#006837', '#1a9850', '#66bd63', '#a6d96a', '#d9ef8b', '#ffffbf', '#fee08b', '#fdae61', '#f46d43', '#d73027'],
     'PENDIENTE': ['#4daf4a', '#a6d96a', '#ffffbf', '#fdae61', '#f46d43', '#d73027']
 }
-IMAGENES_CULTIVOS = {
-    'MAÍZ': 'https://images.unsplash.com/photo-1560493676-04071c5f467b?auto=format&fit=crop&w=200&h=150&q=80',
-    'SOYA': 'https://images.unsplash.com/photo-1560493676-04071c5f467b?auto=format&fit=crop&w=200&h=150&q=80',
-    'TRIGO': 'https://images.unsplash.com/photo-1560493676-04071c5f467b?auto=format&fit=crop&w=200&h=150&q=80',
-    'GIRASOL': 'https://images.unsplash.com/photo-1560493676-04071c5f467b?auto=format&fit=crop&w=200&h=150&q=80',
-}
 
 # ===== INICIALIZACIÓN SEGURA DE VARIABLES DE CONFIGURACIÓN =====
 nutriente = None
@@ -422,8 +416,7 @@ if st.session_state.email_autorizado is None:
 with st.sidebar:
     st.markdown('<div class="sidebar-title">⚙️ CONFIGURACIÓN</div>', unsafe_allow_html=True)
     cultivo = st.selectbox("Cultivo:", ["MAÍZ", "SOYA", "TRIGO", "GIRASOL"])
-    st.image(IMAGENES_CULTIVOS[cultivo], use_container_width=True)
-
+ 
     if satelite_seleccionado in METODOLOGIAS_NPK:
         st.info(f"**Metodología {satelite_seleccionado}:**")
         for nutriente_metodo, info in METODOLOGIAS_NPK[satelite_seleccionado].items():
