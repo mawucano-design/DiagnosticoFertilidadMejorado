@@ -185,7 +185,7 @@ max-width: 800px !important;
 margin: 0 auto !important;
 line-height: 1.6 !important;
 }
-/* === RESTO DEL CSS (abreviado para brevedad, pero funcional) === */
+/* === RESTO DEL CSS === */
 .stTabs [data-baseweb="tab-list"] { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); padding: 8px 16px; border-radius: 16px; margin-top: 1em; }
 .stTabs [data-baseweb="tab"] { color: #94a3b8; font-weight: 600; padding: 12px 24px; border-radius: 12px; }
 .stTabs [aria-selected="true"] { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; font-weight: 700; }
@@ -202,8 +202,8 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 2
 st.markdown("""
 <div class="hero-banner">
 <div class="hero-content">
-<h1 class="hero-title">ANALIZADOR MULTI-CULTIVO SATELITAL - DEMO</h1>
-<p class="hero-subtitle">Versión limitada: 2 análisis gratuitos. ¡Adquiere la versión completa para acceso total!</p>
+<h1 class="hero-title">ANALIZADOR MULTI-CULTIVO SATELITAL</h1>
+<p class="hero-subtitle">Versión DEMO: 2 análisis gratuitos. ¡Obtén el análisis completo de tu lote!</p>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -262,15 +262,44 @@ METODOLOGIAS_NPK = {
 PARAMETROS_CULTIVOS = {
     'MAÍZ': {'NITROGENO': {'min': 150, 'max': 200, 'optimo': 180}, 'FOSFORO': {'min': 40, 'max': 60, 'optimo': 50}, 'POTASIO': {'min': 120, 'max': 180, 'optimo': 150}, 'MATERIA_ORGANICA_OPTIMA': 3.5, 'HUMEDAD_OPTIMA': 0.3, 'NDVI_OPTIMO': 0.85, 'NDRE_OPTIMO': 0.5, 'TCARI_OPTIMO': 0.4, 'OSAVI_OPTIMO': 0.6, 'RENDIMIENTO_BASE': 8.0, 'RENDIMIENTO_OPTIMO': 12.0, 'RESPUESTA_N': 0.05, 'RESPUESTA_P': 0.08, 'RESPUESTA_K': 0.04, 'FACTOR_CLIMA': 0.7},
     'SOYA': {'NITROGENO': {'min': 20, 'max': 40, 'optimo': 30}, 'FOSFORO': {'min': 30, 'max': 50, 'optimo': 40}, 'POTASIO': {'min': 80, 'max': 120, 'optimo': 100}, 'MATERIA_ORGANICA_OPTIMA': 4.0, 'HUMEDAD_OPTIMA': 0.25, 'NDVI_OPTIMO': 0.8, 'NDRE_OPTIMO': 0.45, 'TCARI_OPTIMO': 0.35, 'OSAVI_OPTIMO': 0.55, 'RENDIMIENTO_BASE': 2.5, 'RENDIMIENTO_OPTIMO': 4.0, 'RESPUESTA_N': 0.02, 'RESPUESTA_P': 0.03, 'RESPUESTA_K': 0.025, 'FACTOR_CLIMA': 0.75},
-    'TRIGO': {'NITROGENO': {'min': 120, 'max': 180, 'optimo': 150}, 'FOSFORO': {'min': 40, 'max': 60, 'optima': 50}, 'POTASIO': {'min': 80, 'max': 120, 'optimo': 100}, 'MATERIA_ORGANICA_OPTIMA': 3.0, 'HUMEDAD_OPTIMA': 0.28, 'NDVI_OPTIMO': 0.75, 'NDRE_OPTIMO': 0.4, 'TCARI_OPTIMO': 0.3, 'OSAVI_OPTIMO': 0.5, 'RENDIMIENTO_BASE': 3.5, 'RENDIMIENTO_OPTIMO': 6.0, 'RESPUESTA_N': 0.03, 'RESPUESTA_P': 0.05, 'RESPUESTA_K': 0.035, 'FACTOR_CLIMA': 0.8},
+    'TRIGO': {'NITROGENO': {'min': 120, 'max': 180, 'optimo': 150}, 'FOSFORO': {'min': 40, 'max': 60, 'optimo': 50}, 'POTASIO': {'min': 80, 'max': 120, 'optimo': 100}, 'MATERIA_ORGANICA_OPTIMA': 3.0, 'HUMEDAD_OPTIMA': 0.28, 'NDVI_OPTIMO': 0.75, 'NDRE_OPTIMO': 0.4, 'TCARI_OPTIMO': 0.3, 'OSAVI_OPTIMO': 0.5, 'RENDIMIENTO_BASE': 3.5, 'RENDIMIENTO_OPTIMO': 6.0, 'RESPUESTA_N': 0.03, 'RESPUESTA_P': 0.05, 'RESPUESTA_K': 0.035, 'FACTOR_CLIMA': 0.8},
     'GIRASOL': {'NITROGENO': {'min': 80, 'max': 120, 'optimo': 100}, 'FOSFORO': {'min': 35, 'max': 50, 'optimo': 42}, 'POTASIO': {'min': 100, 'max': 150, 'optimo': 125}, 'MATERIA_ORGANICA_OPTIMA': 3.2, 'HUMEDAD_OPTIMA': 0.22, 'NDVI_OPTIMO': 0.7, 'NDRE_OPTIMO': 0.35, 'TCARI_OPTIMO': 0.25, 'OSAVI_OPTIMO': 0.45, 'RENDIMIENTO_BASE': 2.0, 'RENDIMIENTO_OPTIMO': 3.5, 'RESPUESTA_N': 0.015, 'RESPUESTA_P': 0.02, 'RESPUESTA_K': 0.018, 'FACTOR_CLIMA': 0.65}
 }
 
+# ===== TEXTURA DEL SUELO SEGÚN USDA =====
 TEXTURA_SUELO_OPTIMA = {
-    'MAÍZ': {'textura_optima': 'Franco', 'arena_optima': 45, 'limo_optima': 35, 'arcilla_optima': 20, 'densidad_aparente_optima': 1.3, 'porosidad_optima': 0.5},
-    'SOYA': {'textura_optima': 'Franco', 'arena_optima': 40, 'limo_optima': 40, 'arcilla_optima': 20, 'densidad_aparente_optima': 1.2, 'porosidad_optima': 0.55},
-    'TRIGO': {'textura_optima': 'Franco', 'arena_optima': 50, 'limo_optima': 30, 'arcilla_optima': 20, 'densidad_aparente_optima': 1.25, 'porosidad_optima': 0.52},
-    'GIRASOL': {'textura_optima': 'Franco arenoso-arcilloso', 'arena_optima': 55, 'limo_optima': 25, 'arcilla_optima': 20, 'densidad_aparente_optima': 1.35, 'porosidad_optima': 0.48}
+    'MAÍZ': {
+        'textura_optima': 'Loam',
+        'arena_optima': 40,
+        'limo_optima': 40,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.3,
+        'porosidad_optima': 0.5
+    },
+    'SOYA': {
+        'textura_optima': 'Loam',
+        'arena_optima': 35,
+        'limo_optima': 45,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.2,
+        'porosidad_optima': 0.55
+    },
+    'TRIGO': {
+        'textura_optima': 'Sandy loam',
+        'arena_optima': 50,
+        'limo_optima': 30,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.25,
+        'porosidad_optima': 0.52
+    },
+    'GIRASOL': {
+        'textura_optima': 'Sandy clay loam',
+        'arena_optima': 60,
+        'limo_optima': 20,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.35,
+        'porosidad_optima': 0.48
+    }
 }
 
 CLASIFICACION_PENDIENTES = {
@@ -283,20 +312,25 @@ CLASIFICACION_PENDIENTES = {
 }
 
 RECOMENDACIONES_TEXTURA = {
-    'Franco': {
-        'propiedades': ["Equilibrio arena-limo-arcilla", "Buena aireación y drenaje", "CIC intermedia-alta", "Retención de agua adecuada"],
-        'limitantes': ["Puede compactarse con maquinaria pesada", "Erosión en pendientes si no hay cobertura"],
-        'manejo': ["Mantener coberturas vivas o muertas", "Evitar tránsito excesivo de maquinaria", "Fertilización eficiente, sin muchas pérdidas", "Ideal para la mayoría de cultivos"]
+    'Loam': {
+        'propiedades': ["Equilibrio ideal arena-limo-arcilla", "Buena aireación y drenaje", "CIC intermedia-alta", "Retención de agua óptima"],
+        'limitantes': ["Puede compactarse con maquinaria pesada", "Erosión si no hay cobertura vegetal"],
+        'manejo': ["Mantener coberturas", "Evitar tránsito en suelo húmedo", "Fertilización eficiente"]
     },
-    'Franco arcilloso': {
-        'propiedades': ["Mayor proporción de arcilla (25–35%)", "Alta retención de agua y nutrientes", "Drenaje natural lento", "Buena fertilidad natural"],
-        'limitantes': ["Riesgo de encharcamiento", "Compactación fácil", "Menor oxigenación radicular"],
-        'manejo': ["Implementar drenajes (canales y subdrenes)", "Subsolado previo a siembra", "Incorporar materia orgánica", "Fertilización fraccionada en lluvias intensas"]
+    'Sandy loam': {
+        'propiedades': ["Drenaje rápido", "Buen desarrollo radicular", "Fácil laboreo"],
+        'limitantes': ["Baja retención de agua y nutrientes", "Riesgo de lixiviación"],
+        'manejo': ["Aplicar materia orgánica", "Riego frecuente", "Fertilización fraccionada"]
     },
-    'Franco arenoso-arcilloso': {
-        'propiedades': ["Arena 40–50%, arcilla 20–30%", "Buen desarrollo radicular", "Drenaje moderado", "Retención de agua moderada-baja"],
-        'limitantes': ["Riesgo de lixiviación de nutrientes", "Estrés hídrico en veranos", "Fertilidad moderada"],
-        'manejo': ["Uso de coberturas leguminosas", "Aplicar mulching", "Riego suplementario en sequía", "Fertilización fraccionada"]
+    'Sandy clay loam': {
+        'propiedades': ["Retención de nutrientes moderada-alta", "Estructura estable"],
+        'limitantes': ["Drenaje lento", "Compactación en suelo húmedo"],
+        'manejo': ["Subsolado", "Drenajes", "Evitar laboreo en humedad"]
+    },
+    'Clay loam': {
+        'propiedades': ["Alta capacidad de retención de agua y nutrientes", "Fertilidad natural elevada"],
+        'limitantes': ["Drenaje deficiente", "Trabajo difícil en húmedo"],
+        'manejo': ["Mejorar drenaje", "Incorporar materia orgánica", "Laboreo en condición óptima"]
     }
 }
 
@@ -330,14 +364,39 @@ resolucion_dem = 10.0
 # === SISTEMA DE REGISTRO POR EMAIL + LÍMITE DE 2 ANÁLISIS ===
 if 'email_autorizado' not in st.session_state:
     st.session_state.email_autorizado = None
+if 'es_admin' not in st.session_state:
+    st.session_state.es_admin = False
 if 'analisis_realizados' not in st.session_state:
     st.session_state.analisis_realizados = 0
 
-# Bloquear si ya se hicieron 2 análisis
-if st.session_state.analisis_realizados >= 2:
+# ADMIN EMAIL
+EMAIL_ADMIN = "lospiesenlatierra.vivero@gmail.com"
+
+# Bloquear si ya se hicieron 2 análisis (solo para no admin)
+if not st.session_state.es_admin and st.session_state.analisis_realizados >= 2:
     st.error("🔒 Has alcanzado el límite de la versión DEMO (2 análisis).")
-    st.info("💡 **La versión completa incluye:**\n- Recomendaciones NPK personalizadas\n- Análisis de curvas de nivel y pendientes\n- Sin límite de uso\n- Soporte prioritario")
-    st.markdown("📧 **Contáctanos para adquirir la versión completa:** ventas@agrotech.com")
+
+    st.info("""
+    💡 **¿Quieres analizar todo tu campo sin límites?**  
+    La versión completa incluye:
+    - 📊 **Recomendaciones NPK personalizadas** (dosis por zona)
+    - 🗺️ **Análisis topográfico**: curvas de nivel, pendientes y riesgo de erosión  
+    - 🌱 **Interpretación satelital avanzada** con meteorología integrada  
+    - 📄 **Reportes técnicos en PDF/DOCX listos para imprimir**  
+    - 📞 **Soporte técnico especializado** durante todo el proceso
+    """)
+
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%); padding: 20px; border-radius: 16px; color: white; text-align: center; margin-top: 20px;">
+        <h3 style="margin: 0; color: white;">¿Listo para optimizar tu lote con precisión? 🌾</h3>
+        <p style="margin: 12px 0; font-size: 1.1em;">
+            Contáctanos y realizá el análisis completo de tu campo
+        </p>
+        <p style="margin: 12px 0; font-weight: bold; font-size: 1.2em;">
+            📞 +54 9 3525 53-2313  |  📧 lospiesenlatierra.vivero@gmail.com
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
 
 # Registro de email
@@ -348,7 +407,12 @@ if st.session_state.email_autorizado is None:
     if st.button("✅ Usar la demo"):
         if "@" in email and "." in email:
             st.session_state.email_autorizado = email
-            st.success(f"¡Bienvenido! Puedes realizar hasta 2 análisis.")
+            if email.lower() == EMAIL_ADMIN:
+                st.session_state.es_admin = True
+                st.success("👑 ¡Modo administrador activado! Acceso completo y sin límites.")
+            else:
+                st.session_state.es_admin = False
+                st.success(f"¡Bienvenido! Puedes realizar hasta 2 análisis.")
             st.rerun()
         else:
             st.error("Por favor ingresa un email válido.")
@@ -356,7 +420,7 @@ if st.session_state.email_autorizado is None:
 
 # ===== SIDEBAR MEJORADO (INTERFAZ VISUAL) =====
 with st.sidebar:
-    st.markdown('<div class="sidebar-title">⚙️ CONFIGURACIÓN (DEMO)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-title">⚙️ CONFIGURACIÓN</div>', unsafe_allow_html=True)
     cultivo = st.selectbox("Cultivo:", ["MAÍZ", "SOYA", "TRIGO", "GIRASOL"])
     st.image(IMAGENES_CULTIVOS[cultivo], use_container_width=True)
 
@@ -365,23 +429,34 @@ with st.sidebar:
         for nutriente_metodo, info in METODOLOGIAS_NPK[satelite_seleccionado].items():
             st.write(f"- **{nutriente_metodo}**: {info['metodo']}")
 
-    # === TIPOS DE ANÁLISIS (CON OPCIONES BLOQUEADAS VISIBLES) ===
-    analisis_tipo = st.selectbox(
-        "Análisis disponibles (DEMO):",
-        ["FERTILIDAD ACTUAL", "ANÁLISIS DE TEXTURA"]
-    )
+    # === SELECCIÓN DE ANÁLISIS (COMPLETA PARA ADMIN, LIMITADA PARA DEMO) ===
+    if st.session_state.es_admin:
+        analisis_tipo = st.selectbox(
+            "Tipo de Análisis:",
+            ["FERTILIDAD ACTUAL", "RECOMENDACIONES NPK", "ANÁLISIS DE TEXTURA", "ANÁLISIS DE CURVAS DE NIVEL"]
+        )
+    else:
+        analisis_tipo = st.selectbox(
+            "Análisis disponibles (DEMO):",
+            ["FERTILIDAD ACTUAL", "ANÁLISIS DE TEXTURA"]
+        )
 
-    st.markdown("### 🚫 Funciones de la versión completa:")
-    st.markdown("""
-    <div style="background: #f8fafc; padding: 12px; border-radius: 10px; border-left: 4px solid #94a3b8; margin: 10px 0;">
-        <strong>• RECOMENDACIONES NPK</strong><br>
-        <small style="color: #64748b;">Fertilización variable por nutriente</small>
-    </div>
-    <div style="background: #f8fafc; padding: 12px; border-radius: 10px; border-left: 4px solid #94a3b8; margin: 10px 0;">
-        <strong>• ANÁLISIS DE CURVAS DE NIVEL</strong><br>
-        <small style="color: #64748b;">Topografía, pendientes y erosión</small>
-    </div>
-    """, unsafe_allow_html=True)
+    # Mostrar otras funciones como bloqueadas solo en DEMO
+    if not st.session_state.es_admin:
+        st.markdown("### 🚫 Funciones de la versión completa:")
+        st.markdown("""
+        <div style="background: #f8fafc; padding: 12px; border-radius: 10px; border-left: 4px solid #94a3b8; margin: 10px 0;">
+            <strong>• RECOMENDACIONES NPK</strong><br>
+            <small style="color: #64748b;">Fertilización variable por nutriente</small>
+        </div>
+        <div style="background: #f8fafc; padding: 12px; border-radius: 10px; border-left: 4px solid #94a3b8; margin: 10px 0;">
+            <strong>• ANÁLISIS DE CURVAS DE NIVEL</strong><br>
+            <small style="color: #64748b;">Topografía, pendientes y erosión</small>
+        </div>
+        """, unsafe_allow_html=True)
+
+    if analisis_tipo == "RECOMENDACIONES NPK":
+        nutriente = st.selectbox("Nutriente:", ["NITRÓGENO", "FÓSFORO", "POTASIO"])
 
     st.subheader("🛰️ Fuente de Datos Satelitales")
     satelite_seleccionado = st.selectbox(
@@ -399,7 +474,7 @@ with st.sidebar:
         info = info_satelites[satelite_seleccionado]
         st.info(f"**{info['nombre']}**\n- Resolución: {info['resolucion']}\n- Índices: {', '.join(info['indices'][:3])}")
 
-    if analisis_tipo in ["FERTILIDAD ACTUAL"]:
+    if analisis_tipo in ["FERTILIDAD ACTUAL", "RECOMENDACIONES NPK"]:
         st.subheader("📊 Índices de Vegetación")
         if satelite_seleccionado == "SENTINEL-2":
             indice_seleccionado = st.selectbox("Índice:", ['NDVI', 'NDRE', 'GNDVI'])
@@ -408,7 +483,7 @@ with st.sidebar:
         else:
             indice_seleccionado = st.selectbox("Índice:", ['NDVI', 'NDRE'])
 
-    if analisis_tipo in ["FERTILIDAD ACTUAL"]:
+    if analisis_tipo in ["FERTILIDAD ACTUAL", "RECOMENDACIONES NPK"]:
         st.subheader("📅 Rango Temporal")
         fecha_fin = st.date_input("Fecha fin", datetime.now())
         fecha_inicio = st.date_input("Fecha inicio", datetime.now() - timedelta(days=30))
@@ -416,12 +491,13 @@ with st.sidebar:
     st.subheader("🎯 División de Parcela")
     n_divisiones = st.slider("Número de zonas de manejo:", min_value=16, max_value=48, value=32)
 
+    if analisis_tipo == "ANÁLISIS DE CURVAS DE NIVEL":
+        st.subheader("🏔️ Configuración Curvas de Nivel")
+        intervalo_curvas = st.slider("Intervalo entre curvas (metros):", 1.0, 20.0, 5.0, 1.0)
+        resolucion_dem = st.slider("Resolución DEM (metros):", 5.0, 50.0, 10.0, 5.0)
+
     st.subheader("📤 Subir Parcela")
     uploaded_file = st.file_uploader("Subir archivo de tu parcela", type=['zip', 'kml', 'kmz'])
-
-# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-# A PARTIR DE AQUÍ: TODAS LAS FUNCIONES DEL ARCHIVO ORIGINAL (COMPLETAS)
-# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 # ===== FUNCIONES AUXILIARES - CORREGIDAS PARA EPSG:4326 =====
 def validar_y_corregir_crs(gdf):
@@ -490,7 +566,6 @@ def dividir_parcela_en_zonas(gdf, n_zonas):
     else:
         return gdf
 
-# ===== FUNCIONES PARA CARGAR ARCHIVOS =====
 def cargar_shapefile_desde_zip(zip_file):
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -979,7 +1054,7 @@ def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
         url = "https://power.larc.nasa.gov/api/temporal/daily/point"
         response = requests.get(url, params=params, timeout=15)
         data = response.json()
-        if 'properties' not in data:
+        if 'properties' not in 
             st.warning("⚠️ No se obtuvieron datos de NASA POWER (fuera de rango o sin conexión).")
             return None
         series = data['properties']['parameter']
@@ -1027,30 +1102,41 @@ def calcular_recomendaciones_npk_cientificas(gdf_analizado, nutriente, cultivo):
         recomendaciones.append(max(0, recomendado_redondeado))
     return recomendaciones
 
-# ===== FUNCIONES DE TEXTURA DEL SUELO - ACTUALIZADAS =====
+# ===== FUNCIONES DE TEXTURA DEL SUELO - ACTUALIZADAS CON USDA =====
 def clasificar_textura_suelo(arena, limo, arcilla):
     try:
         total = arena + limo + arcilla
         if total == 0:
             return "NO_DETERMINADA"
-        arena_norm = (arena / total) * 100
-        limo_norm = (limo / total) * 100
-        arcilla_norm = (arcilla / total) * 100
-        if arcilla_norm >= 35:
-            return "Franco arcilloso"
-        elif arcilla_norm >= 25 and arcilla_norm <= 35 and arena_norm >= 20 and arena_norm <= 45:
-            return "Franco arcilloso"
-        elif arena_norm >= 40 and arena_norm <= 50 and arcilla_norm >= 20 and arcilla_norm <= 30:
-            return "Franco arenoso-arcilloso"
-        elif arena_norm >= 50 and arena_norm <= 70 and arcilla_norm >= 5 and arcilla_norm <= 20:
-            return "Franco arenoso-arcilloso"
-        elif arcilla_norm >= 7 and arcilla_norm <= 27 and arena_norm >= 43 and arena_norm <= 52:
-            return "Franco"
-        elif arena_norm >= 85:
-            return "Franco arenoso-arcilloso"
+        s = arena / total * 100
+        l = limo / total * 100
+        c = arcilla / total * 100
+
+        if c >= 40 and l < 40 and s <= 45:
+            return "Clay"
+        elif c >= 40 and l >= 40:
+            return "Silty clay"
+        elif c >= 40 and s > 45:
+            return "Sandy clay"
+        elif c >= 27 and c < 40 and s <= 20 and l >= 28:
+            return "Clay loam"
+        elif c >= 27 and c < 40 and s >= 20 and l <= 28:
+            return "Sandy clay loam"
+        elif c >= 7 and c < 27 and s >= 7 and s < 52:
+            return "Loam"
+        elif c >= 7 and c < 27 and s >= 52 and s <= 85 and l < 50:
+            return "Sandy loam"
+        elif c >= 7 and c < 27 and l >= 50 and s <= 50:
+            return "Silty loam"
+        elif c < 7 and s >= 85:
+            return "Sand"
+        elif c < 7 and s >= 70 and s < 85:
+            return "Loamy sand"
+        elif c >= 20 and s >= 65:
+            return "Sandy clay loam"
         else:
-            return "Franco"
-    except Exception as e:
+            return "Loam"
+    except:
         return "NO_DETERMINADA"
 
 def analizar_textura_suelo(gdf, cultivo):
@@ -1341,12 +1427,12 @@ def generar_recomendaciones_generales(gdf_analizado, analisis_tipo, cultivo):
         elif analisis_tipo == "ANÁLISIS DE TEXTURA":
             if 'textura_suelo' in gdf_analizado.columns:
                 textura_predominante = gdf_analizado['textura_suelo'].mode()[0] if len(gdf_analizado) > 0 else "N/D"
-                if textura_predominante == "Franco arcilloso":
+                if textura_predominante == "Clay loam":
                     recomendaciones.append("Suelo franco arcilloso: Mejorar drenaje y evitar laboreo en condiciones húmedas")
-                elif textura_predominante == "Franco arenoso-arcilloso":
-                    recomendaciones.append("Suelo franco arenoso-arcilloso: Aumentar materia orgánica y considerar riego frecuente")
-                elif textura_predominante == "Franco":
-                    recomendaciones.append("Textura franca: Condiciones óptimas, mantener prácticas de conservación")
+                elif textura_predominante == "Sandy clay loam":
+                    recomendaciones.append("Suelo franco arcilloso arenoso: Aumentar materia orgánica y considerar riego frecuente")
+                elif textura_predominante == "Loam":
+                    recomendaciones.append("Textura franca (USDA Loam): Condiciones óptimas, mantener prácticas de conservación")
         if cultivo == "MAÍZ":
             recomendaciones.append("Para maíz: Priorizar aplicación de nitrógeno en etapas de crecimiento vegetativo.")
             recomendaciones.append("Mantener humedad adecuada durante floración y llenado de grano.")
@@ -1757,9 +1843,10 @@ def crear_mapa_texturas_con_esri(gdf_analizado, cultivo):
         fig.patch.set_facecolor('#0f172a')
         ax.set_facecolor('#0f172a')
         colores_textura = {
-            'Franco': '#c7eae5',
-            'Franco arcilloso': '#5ab4ac',
-            'Franco arenoso-arcilloso': '#f6e8c3',
+            'Loam': '#c7eae5',
+            'Sandy loam': '#f6e8c3',
+            'Sandy clay loam': '#d8b365',
+            'Clay loam': '#5ab4ac',
             'NO_DETERMINADA': '#999999'
         }
         for idx, row in gdf_plot.iterrows():
@@ -1784,7 +1871,7 @@ def crear_mapa_texturas_con_esri(gdf_analizado, cultivo):
         from matplotlib.patches import Patch
         legend_elements = [Patch(facecolor=color, edgecolor='white', label=textura)
                           for textura, color in colores_textura.items()]
-        legend = ax.legend(handles=legend_elements, title='Texturas', loc='upper left', bbox_to_anchor=(1.05, 1))
+        legend = ax.legend(handles=legend_elements, title='Texturas (USDA)', loc='upper left', bbox_to_anchor=(1.05, 1))
         legend.get_title().set_color('white')
         for text in legend.get_texts():
             text.set_color('white')
@@ -1909,11 +1996,11 @@ def ejecutar_analisis(gdf, nutriente, analisis_tipo, n_divisiones, cultivo,
 
 # ===== FUNCIONES DE VISUALIZACIÓN =====
 def mostrar_resultados_textura(gdf_analizado, cultivo, area_total):
-    st.subheader("📊 ESTADÍSTICAS DE TEXTURA")
+    st.subheader("📊 ESTADÍSTICAS DE TEXTURA (USDA)")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         textura_predominante = gdf_analizado['textura_suelo'].mode()[0] if len(gdf_analizado) > 0 else "NO_DETERMINADA"
-        st.metric("🏗️ Textura Predominante", textura_predominante)
+        st.metric("🏗️ Textura Predominante (USDA)", textura_predominante)
     with col2:
         avg_arena = gdf_analizado['arena'].mean()
         st.metric("🏖️ Arena Promedio", f"{avg_arena:.1f}%")
@@ -1935,7 +2022,7 @@ def mostrar_resultados_textura(gdf_analizado, cultivo, area_total):
     ax1.set_title('Composición Promedio del Suelo', color='white')
     textura_dist = gdf_analizado['textura_suelo'].value_counts()
     ax2.bar(textura_dist.index, textura_dist.values, color=[PALETAS_GEE['TEXTURA'][i % len(PALETAS_GEE['TEXTURA'])] for i in range(len(textura_dist))])
-    ax2.set_title('Distribución de Texturas', color='white')
+    ax2.set_title('Distribución de Texturas (USDA)', color='white')
     ax2.set_xlabel('Textura', color='white')
     ax2.set_ylabel('Número de Zonas', color='white')
     ax2.tick_params(axis='x', rotation=45, colors='white')
@@ -1958,9 +2045,9 @@ def mostrar_resultados_textura(gdf_analizado, cultivo, area_total):
     columnas_textura = [col for col in columnas_textura if col in gdf_analizado.columns]
     if columnas_textura:
         tabla_textura = gdf_analizado[columnas_textura].copy()
-        tabla_textura.columns = ['Zona', 'Área (ha)', 'Textura', 'Arena (%)', 'Limo (%)', 'Arcilla (%)']
+        tabla_textura.columns = ['Zona', 'Área (ha)', 'Textura (USDA)', 'Arena (%)', 'Limo (%)', 'Arcilla (%)']
         st.dataframe(tabla_textura)
-    st.subheader("💡 RECOMENDACIONES DE MANEJO POR TEXTURA")
+    st.subheader("💡 RECOMENDACIONES DE MANEJO POR TEXTURA (USDA)")
     if 'textura_suelo' in gdf_analizado.columns:
         textura_predominante = gdf_analizado['textura_suelo'].mode()[0] if len(gdf_analizado) > 0 else "NO_DETERMINADA"
         if textura_predominante in RECOMENDACIONES_TEXTURA:
@@ -1982,7 +2069,7 @@ def mostrar_resultados_textura(gdf_analizado, cultivo, area_total):
     st.subheader("💾 DESCARGAR RESULTADOS")
     if 'columnas_textura' in locals() and columnas_textura:
         tabla_textura = gdf_analizado[columnas_textura].copy()
-        tabla_textura.columns = ['Zona', 'Área (ha)', 'Textura', 'Arena (%)', 'Limo (%)', 'Arcilla (%)']
+        tabla_textura.columns = ['Zona', 'Área (ha)', 'Textura (USDA)', 'Arena (%)', 'Limo (%)', 'Arcilla (%)']
         csv = tabla_textura.to_csv(index=False)
         st.download_button(
             "📥 Descargar CSV con Análisis de Textura",
@@ -2122,118 +2209,143 @@ if uploaded_file:
                     st.write(f"- Cultivo: {ICONOS_CULTIVOS[cultivo]} {cultivo}")
                     st.write(f"- Análisis: {analisis_tipo}")
                     st.write(f"- Zonas: {n_divisiones}")
-                    if analisis_tipo in ["FERTILIDAD ACTUAL"]:
+                    if analisis_tipo in ["FERTILIDAD ACTUAL", "RECOMENDACIONES NPK"]:
                         st.write(f"- Satélite: {SATELITES_DISPONIBLES[satelite_seleccionado]['nombre']}")
                         st.write(f"- Índice: {indice_seleccionado}")
+                    elif analisis_tipo == "ANÁLISIS DE CURVAS DE NIVEL":
+                        st.write(f"- Intervalo curvas: {intervalo_curvas} m")
+                        st.write(f"- Resolución DEM: {resolucion_dem} m")
 
-                # === BOTÓN DE EJECUCIÓN (INCREMENTA CONTADOR) ===
+                # === BOTÓN DE EJECUCIÓN (INCREMENTA CONTADOR SOLO SI NO ES ADMIN) ===
                 if st.button("🚀 EJECUTAR ANÁLISIS COMPLETO", type="primary"):
-                    # Incrementar contador de análisis
-                    st.session_state.analisis_realizados += 1
+                    # Incrementar contador solo si no es admin
+                    if not st.session_state.es_admin:
+                        st.session_state.analisis_realizados += 1
 
-                    # Ejecutar análisis (solo para los permitidos)
-                    if analisis_tipo in ["FERTILIDAD ACTUAL", "ANÁLISIS DE TEXTURA"]:
+                    # Ejecutar análisis
+                    if analisis_tipo in ["FERTILIDAD ACTUAL", "RECOMENDACIONES NPK"]:
                         resultados = ejecutar_analisis(
                             gdf, nutriente, analisis_tipo, n_divisiones,
                             cultivo, satelite_seleccionado, indice_seleccionado,
                             fecha_inicio, fecha_fin
                         )
-                        if resultados and resultados['exitoso']:
-                            st.session_state['resultados_guardados'] = {
-                                'gdf_analizado': resultados['gdf_analizado'],
-                                'analisis_tipo': analisis_tipo,
-                                'cultivo': cultivo,
-                                'area_total': resultados['area_total'],
-                                'nutriente': nutriente,
-                                'satelite_seleccionado': satelite_seleccionado,
-                                'indice_seleccionado': indice_seleccionado,
-                                'mapa_buffer': resultados.get('mapa_buffer'),
-                                'X': None,
-                                'Y': None,
-                                'Z': None,
-                                'pendiente_grid': None,
-                                'gdf_original': gdf if analisis_tipo == "ANÁLISIS DE CURVAS DE NIVEL" else None,
-                                'df_power': resultados.get('df_power')
+                    elif analisis_tipo == "ANÁLISIS DE CURVAS DE NIVEL":
+                        resultados = ejecutar_analisis(
+                            gdf, None, analisis_tipo, n_divisiones,
+                            cultivo, None, None, None, None,
+                            intervalo_curvas, resolucion_dem
+                        )
+                    else:  # ANÁLISIS DE TEXTURA
+                        resultados = ejecutar_analisis(
+                            gdf, None, analisis_tipo, n_divisiones,
+                            cultivo, None, None, None, None
+                        )
+
+                    if resultados and resultados['exitoso']:
+                        st.session_state['resultados_guardados'] = {
+                            'gdf_analizado': resultados['gdf_analizado'],
+                            'analisis_tipo': analisis_tipo,
+                            'cultivo': cultivo,
+                            'area_total': resultados['area_total'],
+                            'nutriente': nutriente,
+                            'satelite_seleccionado': satelite_seleccionado,
+                            'indice_seleccionado': indice_seleccionado,
+                            'mapa_buffer': resultados.get('mapa_buffer'),
+                            'X': None,
+                            'Y': None,
+                            'Z': None,
+                            'pendiente_grid': None,
+                            'gdf_original': gdf if analisis_tipo == "ANÁLISIS DE CURVAS DE NIVEL" else None,
+                            'df_power': resultados.get('df_power')
+                        }
+
+                        # Mostrar resultados
+                        if analisis_tipo == "ANÁLISIS DE TEXTURA":
+                            mostrar_resultados_textura(resultados['gdf_analizado'], cultivo, resultados['area_total'])
+                        elif analisis_tipo == "ANÁLISIS DE CURVAS DE NIVEL":
+                            X, Y, Z, _ = generar_dem_sintetico(gdf, resolucion_dem)
+                            pendiente_grid = calcular_pendiente_simple(X, Y, Z, resolucion_dem)
+                            curvas, elevaciones = generar_curvas_nivel_simple(X, Y, Z, intervalo_curvas, gdf)
+                            st.session_state['resultados_guardados'].update({
+                                'X': X, 'Y': Y, 'Z': Z, 'pendiente_grid': pendiente_grid
+                            })
+                            mostrar_resultados_curvas_nivel(X, Y, Z, pendiente_grid, curvas, elevaciones, gdf, cultivo, resultados['area_total'])
+                        else:
+                            # Mostrar resultados de fertilidad/NPK
+                            gdf_analizado = resultados['gdf_analizado']
+                            if satelite_seleccionado in METODOLOGIAS_NPK and 'nitrogeno_actual' in gdf_analizado.columns:
+                                st.subheader("🔬 METODOLOGÍA CIENTÍFICA APLICADA")
+                                col_m1, col_m2 = st.columns(2)
+                                with col_m1:
+                                    st.info(f"**Método:** NDRE + Regresión Espectral")
+                                    st.write(f"**Fórmula N:** N = 150 × NDRE + 50 × (B8A/B5)")
+                                with col_m2:
+                                    st.write(f"**Bandas:** B5, B8A")
+                                    st.write(f"**Referencia:** Clevers & Gitelson, 2013")
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("Zonas Analizadas", len(gdf_analizado))
+                            with col2:
+                                st.metric("Área Total", f"{resultados['area_total']:.1f} ha")
+                            with col3:
+                                valor_prom = gdf_analizado['npk_integrado'].mean()
+                                st.metric("Índice NPK Integrado", f"{valor_prom:.3f}")
+                            with col4:
+                                if 'nitrogeno_actual' in gdf_analizado.columns:
+                                    n_prom = gdf_analizado['nitrogeno_actual'].mean()
+                                    st.metric("Nitrógeno Promedio", f"{n_prom:.1f} kg/ha")
+                            if resultados.get('df_power') is not None:
+                                df_power = resultados['df_power']
+                                st.subheader("🌤️ DATOS METEOROLÓGICOS (NASA POWER)")
+                                col5, col6, col7 = st.columns(3)
+                                with col5:
+                                    st.metric("☀️ Radiación Solar", f"{df_power['radiacion_solar'].mean():.1f} kWh/m²/día")
+                                with col6:
+                                    st.metric("💨 Viento a 2m", f"{df_power['viento_2m'].mean():.2f} m/s")
+                                with col7:
+                                    st.metric("💧 NDWI Promedio", f"{gdf_analizado['ndwi'].mean():.3f}")
+                            st.subheader("🗺️ MAPAS DE NPK CON ESRI SATELLITE")
+                            mapa_fertilidad = crear_mapa_fertilidad_integrada(gdf_analizado, cultivo, satelite_seleccionado)
+                            if mapa_fertilidad:
+                                st.image(mapa_fertilidad, use_container_width=True)
+                                st.download_button(
+                                    "📥 Descargar Mapa de Fertilidad",
+                                    mapa_fertilidad,
+                                    f"mapa_fertilidad_{cultivo}_{datetime.now().strftime('%Y%m%d')}.png",
+                                    "image/png"
+                                )
+                            tab_n, tab_p, tab_k = st.tabs(["🌱 Nitrógeno", "🧪 Fósforo", "⚡ Potasio"])
+                            with tab_n:
+                                mapa_n = crear_mapa_npk_con_esri(gdf_analizado, "NITRÓGENO", cultivo, satelite_seleccionado)
+                                if mapa_n:
+                                    st.image(mapa_n, use_container_width=True)
+                            with tab_p:
+                                mapa_p = crear_mapa_npk_con_esri(gdf_analizado, "FÓSFORO", cultivo, satelite_seleccionado)
+                                if mapa_p:
+                                    st.image(mapa_p, use_container_width=True)
+                            with tab_k:
+                                mapa_k = crear_mapa_npk_con_esri(gdf_analizado, "POTASIO", cultivo, satelite_seleccionado)
+                                if mapa_k:
+                                    st.image(mapa_k, use_container_width=True)
+                            st.subheader("🔬 ÍNDICES SATELITALES Y NPK POR ZONA")
+                            columnas_indices = ['id_zona', 'npk_integrado', 'nitrogeno_actual', 'fosforo_actual', 'potasio_actual']
+                            columnas_indices.extend(['materia_organica', 'ndvi', 'ndre', 'humedad_suelo', 'ndwi'])
+                            columnas_indices = [col for col in columnas_indices if col in gdf_analizado.columns]
+                            tabla_indices = gdf_analizado[columnas_indices].copy()
+                            rename_dict = {
+                                'id_zona': 'Zona',
+                                'npk_integrado': 'NPK Integrado',
+                                'nitrogeno_actual': 'N (kg/ha)',
+                                'fosforo_actual': 'P (kg/ha)',
+                                'potasio_actual': 'K (kg/ha)',
+                                'materia_organica': 'MO (%)',
+                                'ndvi': 'NDVI',
+                                'ndre': 'NDRE',
+                                'humedad_suelo': 'Humedad',
+                                'ndwi': 'NDWI'
                             }
-                            # Mostrar resultados según tipo
-                            if analisis_tipo == "ANÁLISIS DE TEXTURA":
-                                mostrar_resultados_textura(resultados['gdf_analizado'], cultivo, resultados['area_total'])
-                            else:
-                                # Mostrar resultados de fertilidad
-                                gdf_analizado = resultados['gdf_analizado']
-                                if satelite_seleccionado in METODOLOGIAS_NPK and 'nitrogeno_actual' in gdf_analizado.columns:
-                                    st.subheader("🔬 METODOLOGÍA CIENTÍFICA APLICADA")
-                                    col_m1, col_m2 = st.columns(2)
-                                    with col_m1:
-                                        st.info(f"**Método:** NDRE + Regresión Espectral")
-                                        st.write(f"**Fórmula N:** N = 150 × NDRE + 50 × (B8A/B5)")
-                                    with col_m2:
-                                        st.write(f"**Bandas:** B5, B8A")
-                                        st.write(f"**Referencia:** Clevers & Gitelson, 2013")
-                                col1, col2, col3, col4 = st.columns(4)
-                                with col1:
-                                    st.metric("Zonas Analizadas", len(gdf_analizado))
-                                with col2:
-                                    st.metric("Área Total", f"{resultados['area_total']:.1f} ha")
-                                with col3:
-                                    valor_prom = gdf_analizado['npk_integrado'].mean()
-                                    st.metric("Índice NPK Integrado", f"{valor_prom:.3f}")
-                                with col4:
-                                    if 'nitrogeno_actual' in gdf_analizado.columns:
-                                        n_prom = gdf_analizado['nitrogeno_actual'].mean()
-                                        st.metric("Nitrógeno Promedio", f"{n_prom:.1f} kg/ha")
-                                if resultados.get('df_power') is not None:
-                                    df_power = resultados['df_power']
-                                    st.subheader("🌤️ DATOS METEOROLÓGICOS (NASA POWER)")
-                                    col5, col6, col7 = st.columns(3)
-                                    with col5:
-                                        st.metric("☀️ Radiación Solar", f"{df_power['radiacion_solar'].mean():.1f} kWh/m²/día")
-                                    with col6:
-                                        st.metric("💨 Viento a 2m", f"{df_power['viento_2m'].mean():.2f} m/s")
-                                    with col7:
-                                        st.metric("💧 NDWI Promedio", f"{gdf_analizado['ndwi'].mean():.3f}")
-                                st.subheader("🗺️ MAPAS DE NPK CON ESRI SATELLITE")
-                                mapa_fertilidad = crear_mapa_fertilidad_integrada(gdf_analizado, cultivo, satelite_seleccionado)
-                                if mapa_fertilidad:
-                                    st.image(mapa_fertilidad, use_container_width=True)
-                                    st.download_button(
-                                        "📥 Descargar Mapa de Fertilidad",
-                                        mapa_fertilidad,
-                                        f"mapa_fertilidad_{cultivo}_{datetime.now().strftime('%Y%m%d')}.png",
-                                        "image/png"
-                                    )
-                                tab_n, tab_p, tab_k = st.tabs(["🌱 Nitrógeno", "🧪 Fósforo", "⚡ Potasio"])
-                                with tab_n:
-                                    mapa_n = crear_mapa_npk_con_esri(gdf_analizado, "NITRÓGENO", cultivo, satelite_seleccionado)
-                                    if mapa_n:
-                                        st.image(mapa_n, use_container_width=True)
-                                with tab_p:
-                                    mapa_p = crear_mapa_npk_con_esri(gdf_analizado, "FÓSFORO", cultivo, satelite_seleccionado)
-                                    if mapa_p:
-                                        st.image(mapa_p, use_container_width=True)
-                                with tab_k:
-                                    mapa_k = crear_mapa_npk_con_esri(gdf_analizado, "POTASIO", cultivo, satelite_seleccionado)
-                                    if mapa_k:
-                                        st.image(mapa_k, use_container_width=True)
-                                st.subheader("🔬 ÍNDICES SATELITALES Y NPK POR ZONA")
-                                columnas_indices = ['id_zona', 'npk_integrado', 'nitrogeno_actual', 'fosforo_actual', 'potasio_actual']
-                                columnas_indices.extend(['materia_organica', 'ndvi', 'ndre', 'humedad_suelo', 'ndwi'])
-                                columnas_indices = [col for col in columnas_indices if col in gdf_analizado.columns]
-                                tabla_indices = gdf_analizado[columnas_indices].copy()
-                                rename_dict = {
-                                    'id_zona': 'Zona',
-                                    'npk_integrado': 'NPK Integrado',
-                                    'nitrogeno_actual': 'N (kg/ha)',
-                                    'fosforo_actual': 'P (kg/ha)',
-                                    'potasio_actual': 'K (kg/ha)',
-                                    'materia_organica': 'MO (%)',
-                                    'ndvi': 'NDVI',
-                                    'ndre': 'NDRE',
-                                    'humedad_suelo': 'Humedad',
-                                    'ndwi': 'NDWI'
-                                }
-                                tabla_indices = tabla_indices.rename(columns={k: v for k, v in rename_dict.items() if k in tabla_indices.columns})
-                                st.dataframe(tabla_indices)
+                            tabla_indices = tabla_indices.rename(columns={k: v for k, v in rename_dict.items() if k in tabla_indices.columns})
+                            st.dataframe(tabla_indices)
 
         except Exception as e:
             st.error(f"❌ Error procesando archivo: {str(e)}")
@@ -2251,7 +2363,7 @@ if 'resultados_guardados' in st.session_state:
     with col_exp1:
         if st.button("🗺️ Exportar GeoJSON", key="export_geojson"):
             geojson_data, nombre_archivo = exportar_a_geojson(res['gdf_analizado'], f"parcela_{res['cultivo']}")
-            if geojson_data:
+            if geojson_
                 st.download_button(
                     label="📥 Descargar GeoJSON",
                     data=geojson_data,
@@ -2389,7 +2501,7 @@ with st.expander("🔬 METODOLOGÍA CIENTÍFICA APLICADA"):
 - **Bandas:** B3 (Verde), B6 (SWIR 1)
 **POTASIO (K):**
 - **Método:** Índice NIR-SWIR (Thenkabail et al., 2000)
-- **Fórmula:** `K = 100 × (B5-B7)/(B5+B7) + 50`
+- **Fórmula:** `K = 100 × (B5 - B7)/(B5 + B7) + 50`
 - **Bandas:** B5 (NIR), B7 (SWIR 2)
 ### **📊 VALIDACIÓN CIENTÍFICA:**
 - **Calibración:** Modelos calibrados con datos de campo de estudios publicados
