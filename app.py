@@ -2302,7 +2302,7 @@ if uploaded_file:
                                     st.metric("💨 Viento a 2m", f"{df_power['viento_2m'].mean():.2f} m/s")
                                 with col7:
                                     st.metric("💧 NDWI Promedio", f"{gdf_analizado['ndwi'].mean():.3f}")
-                                                       st.subheader("🗺️ MAPAS DE NPK CON ESRI SATELLITE")
+                                st.subheader("🗺️ MAPAS DE NPK CON ESRI SATELLITE")
                             mapa_fertilidad = crear_mapa_fertilidad_integrada(gdf_analizado, cultivo, satelite_seleccionado)
                             if mapa_fertilidad:
                                 st.image(mapa_fertilidad)
