@@ -387,7 +387,7 @@ if not st.session_state.es_admin and st.session_state.analisis_realizados >= 2:
             Contáctanos y realizá el análisis completo de tu campo
         </p>
         <p style="margin: 12px 0; font-weight: bold; font-size: 1.2em;">
-            📞 +54 9 3525 53-2313  |  📧 lospiesenlatierra.vivero@gmail.com
+            📞 +54 9 3525 53-2313  |  📧 mawucano@gmail.com
         </p>
     </div>
     """, unsafe_allow_html=True)
