@@ -1320,6 +1320,117 @@ def generar_datos_climaticos_simulados(gdf, fecha_inicio, fecha_fin):
             'fuente': 'Simulado (fallback)'
         }
 
+# ===== FUNCIÓN PARA GRÁFICOS CLIMÁTICOS (AÑADIDA) =====
+def crear_graficos_climaticos_completos(datos_climaticos):
+    longitudes = []
+    if 'precipitacion' in datos_climaticos and 'diaria' in datos_climaticos['precipitacion']:
+        longitudes.append(len(datos_climaticos['precipitacion']['diaria']))
+    if 'temperatura' in datos_climaticos and 'diaria' in datos_climaticos['temperatura']:
+        longitudes.append(len(datos_climaticos['temperatura']['diaria']))
+    if 'radiacion' in datos_climaticos and 'diaria' in datos_climaticos['radiacion']:
+        longitudes.append(len(datos_climaticos['radiacion']['diaria']))
+    if 'viento' in datos_climaticos and 'diaria' in datos_climaticos['viento']:
+        longitudes.append(len(datos_climaticos['viento']['diaria']))
+    
+    if not longitudes:
+        st.warning("No hay datos climáticos suficientes para graficar.")
+        return None
+    
+    n_dias = min(longitudes)
+    dias = list(range(1, n_dias + 1))
+    
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    
+    if 'radiacion' in datos_climaticos and datos_climaticos['radiacion'].get('diaria'):
+        rad = np.array(datos_climaticos['radiacion']['diaria'][:n_dias], dtype=np.float64)
+        mask_nan = np.isnan(rad)
+        if np.any(mask_nan):
+            rad_filled = rad.copy()
+            rad_filled[mask_nan] = np.nanmean(rad)
+        else:
+            rad_filled = rad
+        ax1 = axes[0, 0]
+        ax1.plot(dias, rad_filled, 'o-', color='orange', linewidth=2, markersize=4)
+        ax1.fill_between(dias, rad_filled, alpha=0.3, color='orange')
+        if 'promedio' in datos_climaticos['radiacion']:
+            prom_rad = datos_climaticos['radiacion']['promedio']
+            ax1.axhline(y=prom_rad, color='red', linestyle='--', 
+                       label=f"Promedio: {prom_rad} MJ/m²")
+        ax1.set_xlabel('Día')
+        ax1.set_ylabel('Radiación (MJ/m²/día)')
+        ax1.set_title('Radiación Solar', fontweight='bold')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+    else:
+        axes[0, 0].text(0.5, 0.5, "Datos no disponibles", ha='center', va='center')
+        axes[0, 0].set_title('Radiación', fontweight='bold')
+    
+    if 'precipitacion' in datos_climaticos and datos_climaticos['precipitacion'].get('diaria'):
+        precip = np.array(datos_climaticos['precipitacion']['diaria'][:n_dias], dtype=np.float64)
+        ax2 = axes[0, 1]
+        ax2.bar(dias, precip, color='blue', alpha=0.7)
+        ax2.set_xlabel('Día')
+        ax2.set_ylabel('Precipitación (mm)')
+        total_precip = datos_climaticos['precipitacion'].get('total', np.sum(precip))
+        ax2.set_title(f"Precipitación (Total: {total_precip:.1f} mm)", fontweight='bold')
+        ax2.grid(True, alpha=0.3, axis='y')
+    else:
+        axes[0, 1].text(0.5, 0.5, "Datos no disponibles", ha='center', va='center')
+        axes[0, 1].set_title('Precipitación', fontweight='bold')
+    
+    if 'viento' in datos_climaticos and datos_climaticos['viento'].get('diaria'):
+        wind = np.array(datos_climaticos['viento']['diaria'][:n_dias], dtype=np.float64)
+        mask_nan = np.isnan(wind)
+        if np.any(mask_nan):
+            wind_filled = wind.copy()
+            wind_filled[mask_nan] = np.nanmean(wind)
+        else:
+            wind_filled = wind
+        ax3 = axes[1, 0]
+        ax3.plot(dias, wind_filled, 's-', color='green', linewidth=2, markersize=4)
+        ax3.fill_between(dias, wind_filled, alpha=0.3, color='green')
+        if 'promedio' in datos_climaticos['viento']:
+            prom_wind = datos_climaticos['viento']['promedio']
+            ax3.axhline(y=prom_wind, color='red', linestyle='--',
+                       label=f"Promedio: {prom_wind} m/s")
+        ax3.set_xlabel('Día')
+        ax3.set_ylabel('Viento (m/s)')
+        ax3.set_title('Velocidad del Viento', fontweight='bold')
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
+    else:
+        axes[1, 0].text(0.5, 0.5, "Datos no disponibles", ha='center', va='center')
+        axes[1, 0].set_title('Viento', fontweight='bold')
+    
+    if 'temperatura' in datos_climaticos and datos_climaticos['temperatura'].get('diaria'):
+        temp = np.array(datos_climaticos['temperatura']['diaria'][:n_dias], dtype=np.float64)
+        mask_nan = np.isnan(temp)
+        if np.any(mask_nan):
+            temp_filled = temp.copy()
+            temp_filled[mask_nan] = np.nanmean(temp)
+        else:
+            temp_filled = temp
+        ax4 = axes[1, 1]
+        ax4.plot(dias, temp_filled, '^-', color='red', linewidth=2, markersize=4)
+        ax4.fill_between(dias, temp_filled, alpha=0.3, color='red')
+        if 'promedio' in datos_climaticos['temperatura']:
+            prom_temp = datos_climaticos['temperatura']['promedio']
+            ax4.axhline(y=prom_temp, color='blue', linestyle='--',
+                       label=f"Promedio: {prom_temp}°C")
+        ax4.set_xlabel('Día')
+        ax4.set_ylabel('Temperatura (°C)')
+        ax4.set_title('Temperatura Diaria', fontweight='bold')
+        ax4.legend()
+        ax4.grid(True, alpha=0.3)
+    else:
+        axes[1, 1].text(0.5, 0.5, "Datos no disponibles", ha='center', va='center')
+        axes[1, 1].set_title('Temperatura', fontweight='bold')
+    
+    fuente = datos_climaticos.get('fuente', 'Desconocido')
+    plt.suptitle(f"Datos Climáticos - {fuente}", fontsize=16, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    return fig
+
 # ===== ANÁLISIS DE TEXTURA DE SUELO =====
 def analizar_textura_suelo_venezuela_por_bloque(gdf_dividido):
     resultados = []
@@ -2635,7 +2746,8 @@ if st.session_state.analisis_completado:
                 st.markdown("### 📈 GRÁFICOS CLIMÁTICOS COMPLETOS")
                 try:
                     fig_clima = crear_graficos_climaticos_completos(datos_climaticos)
-                    st.pyplot(fig_clima); plt.close(fig_clima)
+                    st.pyplot(fig_clima)
+                    plt.close(fig_clima)
                 except Exception as e:
                     st.error(f"Error al mostrar gráficos climáticos: {str(e)[:100]}")
                 st.markdown("### 📋 INFORMACIÓN ADICIONAL")
@@ -2954,14 +3066,13 @@ if st.session_state.analisis_completado:
                     st.markdown("#### Precio de venta")
                     precio_venta = st.number_input("Precio por tonelada (USD)", value=200 if cultivo=='Trigo' else 180 if cultivo=='Maíz' else 400 if cultivo=='Soja' else 450, step=10)
                     
-                   # Dentro del expander de costos, donde se define rend_max
                     st.markdown("#### Rendimiento potencial máximo (t/ha)")
-                   # Usar un diccionario para evitar mezclar tipos
+                    # Usar diccionario para asegurar tipo float consistente
                     valor_rend = {
-                    'Trigo': 8.0,
-                    'Maíz': 12.0,
-                    'Soja': 4.0,
-                    'Girasol': 3.5
+                        'Trigo': 8.0,
+                        'Maíz': 12.0,
+                        'Soja': 4.0,
+                        'Girasol': 3.5
                     }[cultivo]
                     rend_max = st.number_input("Rendimiento máximo (t/ha)", value=valor_rend, step=0.5)
                 
