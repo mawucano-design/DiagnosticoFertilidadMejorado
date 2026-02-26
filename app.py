@@ -1980,6 +1980,9 @@ def cargar_modelo_yolo(ruta_modelo):
 def detectar_en_imagen(modelo, imagen_cv, conf_threshold=0.25):
     if modelo is None:
         return None
+    if imagen_cv is None or imagen_cv.size == 0:
+        st.error("La imagen está vacía o no se pudo cargar.")
+        return None
     try:
         resultados = modelo(imagen_cv, conf=conf_threshold)
         return resultados
@@ -2760,7 +2763,7 @@ if st.session_state.analisis_completado:
             else:
                 st.info("No hay datos climáticos disponibles")
         
-        with tab5:  # Fertilidad NPK (antes tab6)
+        with tab5:  # Fertilidad NPK
             st.subheader("🧪 FERTILIDAD DEL SUELO Y RECOMENDACIONES NPK")
             st.caption("Basado en NDVI real y modelos de fertilidad típicos para cultivos extensivos.")
             datos_fertilidad = st.session_state.datos_fertilidad
@@ -2808,7 +2811,7 @@ if st.session_state.analisis_completado:
             else:
                 st.info("Ejecute el análisis completo para ver los datos de fertilidad.")
         
-        with tab6:  # Textura Suelo (antes tab7)
+        with tab6:  # Textura Suelo
             st.subheader("🌱 ANÁLISIS DE TEXTURA DE SUELO")
             textura_por_bloque = st.session_state.get('textura_por_bloque', [])
             if textura_por_bloque:
@@ -2860,7 +2863,7 @@ if st.session_state.analisis_completado:
             else:
                 st.info("Ejecute el análisis completo para ver el análisis de textura del suelo.")
         
-        with tab7:  # Curvas de Nivel (antes tab8)
+        with tab7:  # Curvas de Nivel
             st.subheader("🗺️ CURVAS DE NIVEL")
             if st.session_state.demo_mode:
                 st.info("ℹ️ En modo DEMO se muestran curvas de nivel simuladas. Para curvas reales, adquiere la suscripción PREMIUM.")
@@ -2909,7 +2912,7 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-        with tab8:  # Detección satelital YOLO (antes tab9)
+        with tab8:  # Detección satelital YOLO
             st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS)")
             if st.session_state.demo_mode:
                 st.info("ℹ️ Modo DEMO: se generará una imagen simulada. Para imágenes reales, adquiere la suscripción PREMIUM.")
@@ -2944,13 +2947,13 @@ if st.session_state.analisis_completado:
                                     st.session_state.fecha_inicio,
                                     st.session_state.fecha_fin
                                 )
-                                if ruta_img and os.path.exists(ruta_img):
+                                if ruta_img and os.path.exists(ruta_img) and os.path.getsize(ruta_img) > 0:
                                     with open(ruta_img, 'rb') as f:
                                         st.session_state.rgb_img_bytes = f.read()
                                     st.session_state.rgb_img_path = ruta_img
                                     st.success("Imagen descargada correctamente.")
                                 else:
-                                    st.error("No se pudo obtener la imagen MODIS.")
+                                    st.error("No se pudo obtener la imagen MODIS o el archivo está vacío.")
 
             with col2:
                 if st.session_state.get('rgb_img_bytes') is not None:
@@ -2990,8 +2993,19 @@ if st.session_state.analisis_completado:
                 elif st.session_state.get('modelo_yolo') is None:
                     st.error("Debes cargar un modelo YOLO (sube uno arriba).")
                 else:
-                    img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes))
-                    imagen_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+                    try:
+                        img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes))
+                        if img_pil is None or img_pil.size[0] == 0 or img_pil.size[1] == 0:
+                            st.error("La imagen descargada no es válida (tamaño cero).")
+                            st.stop()
+                        imagen_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+                        if imagen_cv is None or imagen_cv.size == 0:
+                            st.error("No se pudo convertir la imagen a formato OpenCV.")
+                            st.stop()
+                    except Exception as e:
+                        st.error(f"Error al cargar la imagen: {str(e)}")
+                        st.stop()
+                    
                     resultados = detectar_en_imagen(st.session_state.modelo_yolo, imagen_cv, conf_threshold=umbral_confianza_sat)
                     if resultados and len(resultados) > 0:
                         img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados)
@@ -3022,7 +3036,7 @@ if st.session_state.analisis_completado:
                     st.session_state.rgb_img_bytes = None
                     st.success("Imagen eliminada.")
         
-        with tab9:  # Análisis de Costos (antes tab10)
+        with tab9:  # Análisis de Costos
             st.subheader("💰 Análisis de Costos de Producción")
             if st.session_state.analisis_completado and gdf_completo is not None:
                 cultivo = st.session_state.cultivo_seleccionado
