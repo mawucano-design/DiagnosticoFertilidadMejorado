@@ -825,7 +825,7 @@ def obtener_ndvi_earthdata(gdf_dividido, fecha_inicio, fecha_fin):
                 st.error("No se pudo descargar el archivo.")
                 return None, None
 
-            hdf_files = [f for f in downloaded_files if f.endswith('.hdf')]
+            hdf_files = [str(f) for f in downloaded_files if str(f).lower().endswith('.hdf')]
             if not hdf_files:
                 st.error("No se encontró archivo HDF en la descarga.")
                 return None, None
@@ -975,7 +975,7 @@ def obtener_ndwi_earthdata(gdf_dividido, fecha_inicio, fecha_fin):
                 st.error("No se pudo descargar el archivo.")
                 return None, None
 
-            hdf_files = [f for f in downloaded_files if f.endswith('.hdf')]
+            hdf_files = [str(f) for f in downloaded_files if str(f).lower().endswith('.hdf')]
             if not hdf_files:
                 st.error("No se encontró archivo HDF.")
                 return None, None
