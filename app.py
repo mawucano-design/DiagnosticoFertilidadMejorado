@@ -1,11 +1,11 @@
-# app.py - Versión definitiva para cultivos extensivos
+# app.py - Versión definitiva para cultivos extensivos (sin pestaña repetida)
 # 
 # - Registro e inicio de sesión de usuarios.
 # - Suscripción mensual (150 USD) con Mercado Pago.
 # - Modo DEMO con datos simulados y posibilidad de subir tu propio polígono.
 # - Modo PREMIUM con datos reales de NDVI y NDWI desde Earthdata (MOD13Q1 y MOD09GA).
 # - Usuario administrador mawucano@gmail.com con suscripción permanente.
-# - Detección de enfermedades mediante imágenes RGB satelitales (MODIS) + YOLO.
+# - Detección de enfermedades mediante imágenes RGB satelitales (MODIS) + YOLO (modelo global).
 # - Análisis de costos de producción.
 #
 # IMPORTANTE: 
@@ -442,7 +442,9 @@ def init_session_state():
         'curvas_nivel': None,
         'demo_mode': False,
         'payment_intent': False,
-        'modelo_yolo': None,  # para almacenar el modelo cargado
+        'modelo_yolo': None,          # modelo YOLO global
+        'rgb_img_bytes': None,         # bytes de la imagen RGB descargada
+        'rgb_img_path': None,          # ruta temporal (si existe)
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1320,7 +1322,7 @@ def generar_datos_climaticos_simulados(gdf, fecha_inicio, fecha_fin):
             'fuente': 'Simulado (fallback)'
         }
 
-# ===== FUNCIÓN PARA GRÁFICOS CLIMÁTICOS (AÑADIDA) =====
+# ===== FUNCIÓN PARA GRÁFICOS CLIMÁTICOS =====
 def crear_graficos_climaticos_completos(datos_climaticos):
     longitudes = []
     if 'precipitacion' in datos_climaticos and 'diaria' in datos_climaticos['precipitacion']:
@@ -2569,10 +2571,11 @@ if st.session_state.analisis_completado:
     gdf_completo = resultados.get('gdf_completo')
     
     if gdf_completo is not None:
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+        # Eliminada la pestaña 5 (Detección con imágenes), ahora solo 9 pestañas
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📊 Resumen", "🗺️ Mapas", "🛰️ Índices", 
-            "🌤️ Clima", "🌱 Detección (imágenes)", "🧪 Fertilidad NPK", 
-            "🌱 Textura Suelo", "🗺️ Curvas de Nivel", "🛰️ Detección satelital YOLO", "💰 Análisis de Costos"
+            "🌤️ Clima", "🧪 Fertilidad NPK", "🌱 Textura Suelo", 
+            "🗺️ Curvas de Nivel", "🛰️ Detección satelital YOLO", "💰 Análisis de Costos"
         ])
         
         with tab1:
@@ -2757,88 +2760,7 @@ if st.session_state.analisis_completado:
             else:
                 st.info("No hay datos climáticos disponibles")
         
-        with tab5:
-            st.subheader("🌱 Detección de plantas con imágenes RGB (YOLO)")
-            st.markdown("""
-            Esta herramienta permite cargar una imagen de campo (RGB) y un modelo YOLO para detectar plantas, malezas u otros objetos.
-            - **Sube una imagen** (JPG, PNG) de la parcela.
-            - **Carga un modelo YOLO** pre-entrenado (formato `.pt` de PyTorch o `.onnx`).
-            - Ajusta el **umbral de confianza**.
-            """)
-
-            try:
-                from ultralytics import YOLO
-                YOLO_AVAILABLE = True
-            except ImportError:
-                YOLO_AVAILABLE = False
-
-            if not YOLO_AVAILABLE:
-                st.error("⚠️ La librería 'ultralytics' no está instalada. Para usar esta función, ejecuta: `pip install ultralytics`")
-            else:
-                col1, col2 = st.columns(2)
-                with col1:
-                    archivo_imagen = st.file_uploader("📸 Subir imagen", type=['jpg', 'jpeg', 'png'], key="yolo_img_plantas")
-                with col2:
-                    archivo_modelo = st.file_uploader("🤖 Cargar modelo YOLO (.pt o .onnx)", type=['pt', 'onnx'], key="yolo_model_plantas")
-
-                umbral_confianza = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05, key="umbral_plantas")
-
-                if archivo_imagen is not None and archivo_modelo is not None:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(archivo_modelo.name)[1]) as tmp_model:
-                        tmp_model.write(archivo_modelo.read())
-                        ruta_modelo_tmp = tmp_model.name
-
-                    imagen_bytes = archivo_imagen.read()
-                    imagen_pil = Image.open(io.BytesIO(imagen_bytes))
-                    imagen_cv = cv2.cvtColor(np.array(imagen_pil), cv2.COLOR_RGB2BGR)
-
-                    modelo = cargar_modelo_yolo(ruta_modelo_tmp)
-
-                    if modelo is not None:
-                        st.info("🔄 Ejecutando inferencia...")
-                        resultados_yolo = detectar_en_imagen(modelo, imagen_cv, conf_threshold=umbral_confianza)
-
-                        if resultados_yolo and len(resultados_yolo) > 0:
-                            img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados_yolo)
-
-                            st.success(f"✅ Se detectaron {len(detecciones)} objetos.")
-
-                            img_rgb = cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB)
-                            st.image(img_rgb, caption="Imagen con detecciones", use_container_width=True)
-
-                            leyenda_html = crear_leyenda_html(detecciones)
-                            st.markdown(leyenda_html, unsafe_allow_html=True)
-
-                            st.markdown("### 📥 Exportar resultados")
-                            img_pil_export = Image.fromarray(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB))
-                            buf = io.BytesIO()
-                            img_pil_export.save(buf, format='PNG')
-                            byte_im = buf.getvalue()
-
-                            df_detecciones = pd.DataFrame(detecciones)
-                            if 'color' in df_detecciones.columns:
-                                df_detecciones = df_detecciones.drop(columns=['color'])
-                            csv_detecciones = df_detecciones.to_csv(index=False)
-
-                            col_dl1, col_dl2 = st.columns(2)
-                            with col_dl1:
-                                st.download_button("📸 Imagen anotada (PNG)", byte_im,
-                                                   f"deteccion_plantas_{datetime.now():%Y%m%d_%H%M%S}.png",
-                                                   "image/png")
-                            with col_dl2:
-                                st.download_button("📊 CSV detecciones", csv_detecciones,
-                                                   f"detecciones_{datetime.now():%Y%m%d_%H%M%S}.csv",
-                                                   "text/csv")
-                        else:
-                            st.warning("No se detectaron objetos con el umbral de confianza actual.")
-                    else:
-                        st.error("No se pudo cargar el modelo. Asegúrate de que sea un archivo válido.")
-
-                    os.unlink(ruta_modelo_tmp)
-                else:
-                    st.info("👆 Sube una imagen y un modelo YOLO para comenzar.")
-        
-        with tab6:
+        with tab5:  # Fertilidad NPK (antes tab6)
             st.subheader("🧪 FERTILIDAD DEL SUELO Y RECOMENDACIONES NPK")
             st.caption("Basado en NDVI real y modelos de fertilidad típicos para cultivos extensivos.")
             datos_fertilidad = st.session_state.datos_fertilidad
@@ -2886,7 +2808,7 @@ if st.session_state.analisis_completado:
             else:
                 st.info("Ejecute el análisis completo para ver los datos de fertilidad.")
         
-        with tab7:
+        with tab6:  # Textura Suelo (antes tab7)
             st.subheader("🌱 ANÁLISIS DE TEXTURA DE SUELO")
             textura_por_bloque = st.session_state.get('textura_por_bloque', [])
             if textura_por_bloque:
@@ -2938,7 +2860,7 @@ if st.session_state.analisis_completado:
             else:
                 st.info("Ejecute el análisis completo para ver el análisis de textura del suelo.")
         
-        with tab8:
+        with tab7:  # Curvas de Nivel (antes tab8)
             st.subheader("🗺️ CURVAS DE NIVEL")
             if st.session_state.demo_mode:
                 st.info("ℹ️ En modo DEMO se muestran curvas de nivel simuladas. Para curvas reales, adquiere la suscripción PREMIUM.")
@@ -2987,14 +2909,14 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-        with tab9:
+        with tab8:  # Detección satelital YOLO (antes tab9)
             st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS)")
             if st.session_state.demo_mode:
                 st.info("ℹ️ Modo DEMO: se generará una imagen simulada. Para imágenes reales, adquiere la suscripción PREMIUM.")
             else:
                 st.markdown("""
                 Esta herramienta descarga una imagen RGB de MODIS (producto MOD09GA) para el área de tu parcela en las fechas seleccionadas.
-                Puedes descargar la imagen y luego analizarla con YOLO (cargando un modelo en la pestaña anterior o aquí mismo).
+                Puedes descargar la imagen y luego analizarla con YOLO.
                 """)
 
             col1, col2 = st.columns(2)
@@ -3043,6 +2965,12 @@ if st.session_state.analisis_completado:
             st.markdown("---")
             st.markdown("### 🤖 Ejecutar YOLO sobre la imagen descargada")
 
+            # Mostrar si ya hay un modelo cargado globalmente
+            if 'modelo_yolo' in st.session_state and st.session_state.modelo_yolo is not None:
+                st.success("✅ Modelo YOLO ya cargado. Puedes usarlo directamente.")
+            else:
+                st.info("No hay modelo cargado. Sube uno a continuación (quedará disponible globalmente).")
+
             archivo_modelo_sat = st.file_uploader("Cargar modelo YOLO (.pt o .onnx)", type=['pt', 'onnx'], key="yolo_model_sat")
             if archivo_modelo_sat is not None:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(archivo_modelo_sat.name)[1]) as tmp_model:
@@ -3050,8 +2978,8 @@ if st.session_state.analisis_completado:
                     ruta_modelo_tmp = tmp_model.name
                 modelo = cargar_modelo_yolo(ruta_modelo_tmp)
                 if modelo is not None:
-                    st.session_state.modelo_yolo_sat = modelo
-                    st.success("Modelo cargado correctamente.")
+                    st.session_state.modelo_yolo = modelo
+                    st.success("Modelo cargado correctamente y disponible globalmente.")
                 os.unlink(ruta_modelo_tmp)
 
             umbral_confianza_sat = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05, key="umbral_sat_ejecutar")
@@ -3059,12 +2987,12 @@ if st.session_state.analisis_completado:
             if st.button("🚀 Ejecutar YOLO sobre la imagen descargada", use_container_width=True):
                 if st.session_state.get('rgb_img_bytes') is None:
                     st.error("Primero debes descargar una imagen (botón 'Descargar imagen MODIS').")
-                elif st.session_state.get('modelo_yolo_sat') is None:
-                    st.error("Debes cargar un modelo YOLO.")
+                elif st.session_state.get('modelo_yolo') is None:
+                    st.error("Debes cargar un modelo YOLO (sube uno arriba).")
                 else:
                     img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes))
                     imagen_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-                    resultados = detectar_en_imagen(st.session_state.modelo_yolo_sat, imagen_cv, conf_threshold=umbral_confianza_sat)
+                    resultados = detectar_en_imagen(st.session_state.modelo_yolo, imagen_cv, conf_threshold=umbral_confianza_sat)
                     if resultados and len(resultados) > 0:
                         img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados)
                         st.image(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB), caption="Detecciones", use_container_width=True)
@@ -3094,7 +3022,7 @@ if st.session_state.analisis_completado:
                     st.session_state.rgb_img_bytes = None
                     st.success("Imagen eliminada.")
         
-        with tab10:
+        with tab9:  # Análisis de Costos (antes tab10)
             st.subheader("💰 Análisis de Costos de Producción")
             if st.session_state.analisis_completado and gdf_completo is not None:
                 cultivo = st.session_state.cultivo_seleccionado
