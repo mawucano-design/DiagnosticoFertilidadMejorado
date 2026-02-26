@@ -2954,8 +2954,16 @@ if st.session_state.analisis_completado:
                     st.markdown("#### Precio de venta")
                     precio_venta = st.number_input("Precio por tonelada (USD)", value=200 if cultivo=='Trigo' else 180 if cultivo=='Maíz' else 400 if cultivo=='Soja' else 450, step=10)
                     
+                   # Dentro del expander de costos, donde se define rend_max
                     st.markdown("#### Rendimiento potencial máximo (t/ha)")
-                    rend_max = st.number_input("Rendimiento máximo (t/ha)", value=8 if cultivo=='Trigo' else 12 if cultivo=='Maíz' else 4 if cultivo=='Soja' else 3.5, step=0.5)
+                   # Usar un diccionario para evitar mezclar tipos
+                    valor_rend = {
+                    'Trigo': 8.0,
+                    'Maíz': 12.0,
+                    'Soja': 4.0,
+                    'Girasol': 3.5
+                    }[cultivo]
+                    rend_max = st.number_input("Rendimiento máximo (t/ha)", value=valor_rend, step=0.5)
                 
                 # Calcular costos
                 costos_dict = {
