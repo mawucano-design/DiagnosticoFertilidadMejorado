@@ -1,17 +1,21 @@
-# app.py - Versión para cultivos extensivos (trigo, maíz, soja, girasol)
+# app.py - Versión definitiva para cultivos extensivos
 # 
 # - Registro e inicio de sesión de usuarios.
 # - Suscripción mensual (150 USD) con Mercado Pago.
 # - Modo DEMO con datos simulados y posibilidad de subir tu propio polígono.
 # - Modo PREMIUM con datos reales de NDVI y NDWI desde Earthdata (MOD13Q1 y MOD09GA).
 # - Usuario administrador mawucano@gmail.com con suscripción permanente.
-# - Detección de plantas mediante imágenes RGB con YOLO.
+# - Detección de enfermedades mediante imágenes RGB satelitales (MODIS) + YOLO.
 # - Análisis de costos de producción.
 #
 # IMPORTANTE: 
 # - Configurar variables de entorno en secrets: MERCADOPAGO_ACCESS_TOKEN,
 #   EARTHDATA_USERNAME, EARTHDATA_PASSWORD, APP_BASE_URL.
-# - Instalar dependencias: pip install earthaccess xarray rioxarray rasterio pyhdf ultralytics
+# - Instalar dependencias (requirements.txt): 
+#   streamlit geopandas pandas numpy matplotlib shapely folium streamlit-folium branca plotly
+#   opencv-python-headless pillow scipy requests xarray netCDF4 rasterio scikit-image ultralytics
+#   mercadopago markdown-it-py mdurl earthaccess rioxarray pyhdf
+# - Crear archivo packages.txt en la raíz con: libgl1-mesa-glx
 
 import streamlit as st
 import geopandas as gpd
@@ -368,8 +372,7 @@ def generar_datos_simulados_completos(gdf_original, n_divisiones):
     ndwi_vals = np.clip(ndwi_vals, 0.1, 0.7)
     gdf_dividido['ndwi_modis'] = np.round(ndwi_vals, 3)
     
-    # No se simula edad para cultivos anuales
-    
+    # Clasificar salud
     def clasificar_salud(ndvi):
         if ndvi < 0.4: return 'Crítica'
         if ndvi < 0.6: return 'Baja'
@@ -439,6 +442,7 @@ def init_session_state():
         'curvas_nivel': None,
         'demo_mode': False,
         'payment_intent': False,
+        'modelo_yolo': None,  # para almacenar el modelo cargado
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -452,7 +456,7 @@ check_subscription()
 # ===== CONFIGURACIONES =====
 CULTIVOS = ['Trigo', 'Maíz', 'Soja', 'Girasol']
 
-# ===== FUNCIONES DE UTILIDAD MEJORADAS =====
+# ===== FUNCIONES DE UTILIDAD =====
 def validar_y_corregir_crs(gdf):
     """
     Valida y corrige el CRS del GeoDataFrame a EPSG:4326 (WGS84).
@@ -461,26 +465,16 @@ def validar_y_corregir_crs(gdf):
         return gdf
     
     try:
-        # Si no tiene CRS, asumir WGS84
         if gdf.crs is None:
-            # Verificar si las coordenadas parecen estar en grados
             bounds = gdf.total_bounds
             if abs(bounds[0]) <= 180 and abs(bounds[2]) <= 180:
                 gdf = gdf.set_crs('EPSG:4326')
             else:
-                # Podría estar en metros, intentar convertir
                 gdf = gdf.set_crs('EPSG:3857')
                 gdf = gdf.to_crs('EPSG:4326')
-        
-        # Si tiene CRS pero no es WGS84, convertir
         elif str(gdf.crs).upper() != 'EPSG:4326':
-            try:
-                gdf = gdf.to_crs('EPSG:4326')
-            except Exception as e:
-                st.warning(f"⚠️ No se pudo convertir CRS: {e}")
-        
+            gdf = gdf.to_crs('EPSG:4326')
         return gdf
-    
     except Exception as e:
         st.warning(f"Error al corregir CRS: {e}")
         return gdf
@@ -546,54 +540,36 @@ def procesar_kml_robusto(file_content):
     Parser KML mejorado que maneja múltiples formatos y coordenadas.
     """
     try:
-        # Decodificar contenido
         try:
             content = file_content.decode('utf-8')
         except:
             content = file_content.decode('latin-1', errors='ignore')
         
         polygons = []
-        
-        # Buscar todas las secciones de coordenadas
-        coord_sections = re.findall(
-            r'<coordinates[^>]*>([\s\S]*?)</coordinates>', 
-            content, 
-            re.IGNORECASE | re.DOTALL
-        )
+        coord_sections = re.findall(r'<coordinates[^>]*>([\s\S]*?)</coordinates>', content, re.IGNORECASE | re.DOTALL)
         
         for coord_text in coord_sections:
             coord_text = coord_text.strip()
             if not coord_text:
                 continue
-            
             coord_list = []
-            
-            # Dividir por espacios, saltos de línea o tabuladores
             coords = re.split(r'[\s\n\t]+', coord_text)
-            
             for coord in coords:
                 coord = coord.strip()
                 if not coord or ',' not in coord:
                     continue
-                
                 try:
                     parts = [p.strip() for p in coord.split(',')]
                     if len(parts) >= 2:
                         lon = float(parts[0])
                         lat = float(parts[1])
-                        
-                        # Validar rango de coordenadas
                         if -180 <= lon <= 180 and -90 <= lat <= 90:
                             coord_list.append((lon, lat))
                 except ValueError:
                     continue
-            
-            # Crear polígono si hay suficientes puntos
             if len(coord_list) >= 3:
-                # Cerrar polígono si no está cerrado
                 if coord_list[0] != coord_list[-1]:
                     coord_list.append(coord_list[0])
-                
                 try:
                     polygon = Polygon(coord_list)
                     if polygon.is_valid and polygon.area > 0:
@@ -604,21 +580,11 @@ def procesar_kml_robusto(file_content):
         if polygons:
             return gpd.GeoDataFrame(geometry=polygons, crs='EPSG:4326')
         
-        # Intentar buscar Placemark como fallback
-        placemarks = re.findall(
-            r'<Placemark[^>]*>([\s\S]*?)</Placemark>', 
-            content, 
-            re.IGNORECASE | re.DOTALL
-        )
-        
+        # Fallback: buscar Placemark
+        placemarks = re.findall(r'<Placemark[^>]*>([\s\S]*?)</Placemark>', content, re.IGNORECASE | re.DOTALL)
         for placemark in placemarks:
-            coord_match = re.search(
-                r'<coordinates[^>]*>([\s\S]*?)</coordinates>', 
-                placemark, 
-                re.IGNORECASE
-            )
+            coord_match = re.search(r'<coordinates[^>]*>([\s\S]*?)</coordinates>', placemark, re.IGNORECASE)
             if coord_match:
-                # Procesar coordenadas del Placemark...
                 coord_text = coord_match.group(1).strip()
                 if coord_text:
                     coord_list = []
@@ -647,7 +613,6 @@ def procesar_kml_robusto(file_content):
         
         if polygons:
             return gpd.GeoDataFrame(geometry=polygons, crs='EPSG:4326')
-        
         return None
         
     except Exception as e:
@@ -666,7 +631,6 @@ def cargar_archivo_plantacion(uploaded_file):
         gdf = None
         
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # === ZIP con Shapefile ===
             if ext == '.zip':
                 with zipfile.ZipFile(io.BytesIO(file_content), 'r') as zip_ref:
                     zip_ref.extractall(tmp_dir)
@@ -675,19 +639,13 @@ def cargar_archivo_plantacion(uploaded_file):
                     st.error("❌ No se encontró archivo .shp dentro del ZIP")
                     return None
                 gdf = gpd.read_file(os.path.join(tmp_dir, shp_files[0]))
-            
-            # === GeoJSON ===
             elif ext == '.geojson':
                 gdf = gpd.read_file(io.BytesIO(file_content))
-            
-            # === KML ===
             elif ext == '.kml':
                 gdf = procesar_kml_robusto(file_content)
                 if gdf is None:
                     st.error("❌ No se pudieron extraer polígonos del KML")
                     return None
-            
-            # === KMZ ===
             elif ext == '.kmz':
                 kmz_path = os.path.join(tmp_dir, 'temp.kmz')
                 with open(kmz_path, 'wb') as f:
@@ -703,68 +661,53 @@ def cargar_archivo_plantacion(uploaded_file):
                 if gdf is None:
                     st.error("❌ No se pudieron extraer polígonos del KMZ")
                     return None
-            
             else:
                 st.error(f"❌ Formato no soportado: {ext}. Use .zip, .geojson, .kml o .kmz")
                 return None
         
-        # === Validar GeoDataFrame ===
         if gdf is None or len(gdf) == 0:
             st.error("❌ No se encontraron geometrías válidas")
             return None
         
-        # === Corregir CRS ===
         gdf = validar_y_corregir_crs(gdf)
-        
-        # === Explode MultiPolygons ===
         gdf = gdf.explode(ignore_index=True)
-        
-        # === Filtrar solo polígonos ===
         gdf = gdf[gdf.geometry.geom_type.isin(['Polygon', 'MultiPolygon'])]
         
         if len(gdf) == 0:
             st.error("❌ No hay polígonos válidos después del filtrado")
             return None
         
-        # === Unir todos los polígonos ===
         union = gdf.unary_union
-        
-        # === Manejar MultiPolygon ===
         if union.geom_type == 'MultiPolygon':
             areas = [p.area for p in union.geoms]
             main_poly = union.geoms[np.argmax(areas)]
         else:
             main_poly = union
         
-        # === Reparar geometría inválida ===
         if not main_poly.is_valid:
             try:
                 main_poly = make_valid(main_poly)
-                # Si después de reparar sigue siendo MultiPolygon, tomar el mayor
                 if main_poly.geom_type == 'MultiPolygon':
                     areas = [p.area for p in main_poly.geoms]
                     main_poly = main_poly.geoms[np.argmax(areas)]
             except Exception as e:
                 st.warning(f"⚠️ No se pudo reparar la geometría: {e}")
         
-        # === Crear GeoDataFrame final ===
         gdf_unido = gpd.GeoDataFrame(
             [{'geometry': main_poly, 'id_bloque': 1}], 
             crs='EPSG:4326'
         )
         
-        # === Verificar área ===
         area = calcular_superficie(gdf_unido)
         if area <= 0:
             st.error("❌ El polígono tiene área cero o inválida")
             return None
         
-        # === Guardar en session state para persistir entre modos ===
         st.session_state.gdf_original = gdf_unido
         st.session_state.archivo_cargado = True
         st.session_state.analisis_completado = False
         
-        st.success(f"✅ Plantación cargada: {area:.2f} ha")
+        st.success(f"✅ Parcela cargada: {area:.2f} ha")
         return gdf_unido
         
     except Exception as e:
@@ -825,6 +768,7 @@ def obtener_ndvi_earthdata(gdf_dividido, fecha_inicio, fecha_fin):
                 st.error("No se pudo descargar el archivo.")
                 return None, None
 
+            # Convertir a string para filtrar
             hdf_files = [str(f) for f in downloaded_files if str(f).lower().endswith('.hdf')]
             if not hdf_files:
                 st.error("No se encontró archivo HDF en la descarga.")
@@ -1098,6 +1042,129 @@ def obtener_ndwi_earthdata(gdf_dividido, fecha_inicio, fecha_fin):
         st.error(f"Error en obtención de NDWI con earthaccess: {str(e)}")
         return None, None
 
+# ===== NUEVA FUNCIÓN: OBTENER IMAGEN RGB DE MODIS =====
+def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
+    """
+    Descarga una imagen RGB de MODIS (MOD09GA, bandas 1,4,3) para el polígono dado.
+    Retorna la ruta del archivo de imagen (PNG) o None si falla.
+    """
+    if not EARTHDATA_OK:
+        st.warning("Earthaccess no disponible.")
+        return None
+    if not EARTHDATA_USERNAME or not EARTHDATA_PASSWORD:
+        st.warning("Credenciales de Earthdata no configuradas.")
+        return None
+
+    try:
+        auth = earthaccess.login()
+        if not auth.authenticated:
+            st.error("No se pudo autenticar con Earthdata.")
+            return None
+
+        bounds = gdf.total_bounds
+        bbox = (bounds[0], bounds[1], bounds[2], bounds[3])
+
+        results = earthaccess.search_data(
+            short_name='MOD09GA',
+            version='061',
+            bounding_box=bbox,
+            temporal=(fecha_inicio.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')),
+            count=5
+        )
+
+        if not results:
+            st.warning("No se encontraron escenas MOD09GA en el período.")
+            return None
+
+        # Elegir la primera escena (podría mejorarse seleccionando la de menor nubosidad)
+        granule = results[0]
+        st.info(f"Descargando imagen RGB: {granule['umm']['GranuleUR']}")
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            downloaded_files = earthaccess.download(granule, local_path=temp_dir)
+            if not downloaded_files:
+                st.error("No se pudo descargar el archivo.")
+                return None
+
+            hdf_files = [str(f) for f in downloaded_files if str(f).lower().endswith('.hdf')]
+            if not hdf_files:
+                st.error("No se encontró archivo HDF.")
+                return None
+            download_path = hdf_files[0]
+
+            if not es_archivo_hdf(download_path):
+                st.error("El archivo descargado no es un HDF válido.")
+                return None
+
+            bandas = {}
+            if PYHDF_OK:
+                hdf = SD(download_path, SDC.READ)
+                for name in hdf.datasets().keys():
+                    if 'sur_refl_b01' in name:
+                        data = hdf.select(name).get()
+                        bandas['R'] = data * 0.0001
+                    elif 'sur_refl_b04' in name:
+                        data = hdf.select(name).get()
+                        bandas['G'] = data * 0.0001
+                    elif 'sur_refl_b03' in name:
+                        data = hdf.select(name).get()
+                        bandas['B'] = data * 0.0001
+            elif RASTERIO_OK:
+                with rasterio.open(download_path) as src:
+                    subdatasets = src.subdatasets
+                    for sd in subdatasets:
+                        if 'sur_refl_b01' in sd:
+                            with rasterio.open(sd) as b:
+                                arr = b.read(1)
+                                bandas['R'] = arr * 0.0001
+                        elif 'sur_refl_b04' in sd:
+                            with rasterio.open(sd) as b:
+                                arr = b.read(1)
+                                bandas['G'] = arr * 0.0001
+                        elif 'sur_refl_b03' in sd:
+                            with rasterio.open(sd) as b:
+                                arr = b.read(1)
+                                bandas['B'] = arr * 0.0001
+            else:
+                st.error("No se puede leer HDF (pyhdf ni rasterio).")
+                return None
+
+            if not all(k in bandas for k in ['R','G','B']):
+                st.error("No se encontraron todas las bandas RGB.")
+                return None
+
+            # Escalar a 8 bits usando percentiles para mejorar contraste
+            def scale_band(band):
+                # Usar solo valores positivos (válidos)
+                valid = band[band > 0]
+                if len(valid) == 0:
+                    return np.zeros_like(band, dtype=np.uint8)
+                p2 = np.percentile(valid, 2)
+                p98 = np.percentile(valid, 98)
+                scaled = np.clip((band - p2) / (p98 - p2), 0, 1) * 255
+                return scaled.astype(np.uint8)
+
+            r_8 = scale_band(bandas['R'])
+            g_8 = scale_band(bandas['G'])
+            b_8 = scale_band(bandas['B'])
+
+            rgb = np.stack([r_8, g_8, b_8], axis=-1)
+
+            # Guardar como PNG temporal
+            img_path = os.path.join(temp_dir, "rgb_modis.png")
+            Image.fromarray(rgb).save(img_path)
+
+            return img_path
+
+        except Exception as e:
+            st.error(f"Error procesando imagen RGB: {str(e)}")
+            return None
+
+    except Exception as e:
+        st.error(f"Error obteniendo imagen RGB: {str(e)}")
+        return None
+
 # ===== FUNCIONES CLIMÁTICAS =====
 def obtener_clima_openmeteo(gdf, fecha_inicio, fecha_fin):
     try:
@@ -1253,7 +1320,7 @@ def generar_datos_climaticos_simulados(gdf, fecha_inicio, fecha_fin):
             'fuente': 'Simulado (fallback)'
         }
 
-# ===== ANÁLISIS DE TEXTURA DE SUELO MEJORADO =====
+# ===== ANÁLISIS DE TEXTURA DE SUELO =====
 def analizar_textura_suelo_venezuela_por_bloque(gdf_dividido):
     resultados = []
     try:
@@ -2064,7 +2131,7 @@ def ejecutar_analisis_completo():
                 gdf_dividido['ndwi_modis'] = np.round(0.3 + 0.1 * np.random.randn(len(gdf_dividido)), 3)
                 fuente_ndwi = "Simulado (fallback)"
 
-            # 3. Datos climáticos (con protección contra None)
+            # 3. Datos climáticos
             st.info("🌦️ Obteniendo datos climáticos de Open-Meteo ERA5...")
             datos_clima = obtener_clima_openmeteo(gdf, fecha_inicio, fecha_fin) or {}
             st.info("☀️ Obteniendo radiación y viento de NASA POWER...")
@@ -2078,7 +2145,7 @@ def ejecutar_analisis_completo():
                 'fuente': f"NDVI: {fuente_ndvi}, NDWI: {fuente_ndwi}"
             }
 
-        # Clasificar salud (común)
+        # Clasificar salud
         def clasificar_salud(ndvi):
             if ndvi < 0.4: return 'Crítica'
             if ndvi < 0.6: return 'Baja'
@@ -2086,7 +2153,7 @@ def ejecutar_analisis_completo():
             return 'Buena'
         gdf_dividido['salud'] = gdf_dividido['ndvi_modis'].apply(clasificar_salud)
 
-        # Análisis de suelo (si activado)
+        # Análisis de suelo
         if st.session_state.get('analisis_suelo', True):
             st.session_state.textura_por_bloque = analizar_textura_suelo_venezuela_por_bloque(gdf_dividido)
             if st.session_state.textura_por_bloque:
@@ -2124,11 +2191,9 @@ def calcular_costos(gdf_completo, cultivo):
     rend_maximo = rend_max[cultivo]
     
     # Estimación de rendimiento basado en NDVI (lineal simple)
-    # Se asume que NDVI entre 0.2 y 0.9 corresponde a rendimiento entre 0 y rend_max
     def estimar_rendimiento(ndvi):
         if pd.isna(ndvi):
             return 0
-        # Ajuste lineal: rend = (ndvi - 0.2) * (rend_max / 0.7)  (si ndvi < 0.2 -> 0, >0.9 -> rend_max)
         rend = max(0, (ndvi - 0.2) * (rend_maximo / 0.7))
         return min(rend, rend_maximo)
     
@@ -2165,43 +2230,32 @@ if not EARTHDATA_OK:
 if not RASTERIO_OK and not PYHDF_OK:
     st.warning("⚠️ rasterio y pyhdf no están instalados. No se podrán leer archivos HDF4. Instala al menos uno: pip install rasterio o pip install pyhdf")
 
-# ===== ESTILOS Y CABECERA (OCULTAMIENTO TOTAL DE GITHUB) =====
+# ===== ESTILOS Y CABECERA =====
 st.markdown("""
 <style>
 /* Ocultar menú principal (tres puntos) */
 #MainMenu {visibility: hidden !important;}
-
 /* Ocultar footer de Streamlit */
 footer {visibility: hidden !important;}
-
 /* Ocultar header completo */
 header {visibility: hidden !important;}
 .stApp header {display: none !important;}
-
-/* OCULTAR BARRA DE HERRAMIENTAS (Share, Edit, GitHub) */
+/* OCULTAR BARRA DE HERRAMIENTAS */
 .stApp [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
 .stApp [data-testid="stToolbar"] button {visibility: hidden !important; display: none !important;}
-
 /* Ocultar elementos específicos del toolbar */
 [data-testid="stToolbar"] [aria-label="Share"] {display: none !important;}
 [data-testid="stToolbar"] [aria-label="Edit"] {display: none !important;}
 [data-testid="stToolbar"] [aria-label="GitHub"] {display: none !important;}
-
 /* Ocultar otros elementos de UI de Streamlit */
 .st-emotion-cache-1avcm0n {display: none !important;}
 .st-emotion-cache-16txtl3 {display: none !important;}
 .st-emotion-cache-12fmjuu {display: none !important;}
 .st-emotion-cache-1w71dyz {display: none !important;}
 .st-emotion-cache-ecx28m {display: none !important;}
-
 /* Botón de deploy */
 .stAppDeployButton {display: none !important;}
 [data-testid="stAppDeployButton"] {display: none !important;}
-
-/* Cualquier elemento que contenga texto "GitHub" o enlace */
-a:contains("GitHub"), a[href*="github"] {display: none !important;}
-span:contains("GitHub"), div:contains("GitHub") {display: none !important;}
-
 /* Estilos personalizados de la app */
 .hero-banner { 
     background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98)); 
@@ -2252,7 +2306,6 @@ div[data-testid="metric-container"] {
     border: 1px solid rgba(76, 175, 80, 0.25) !important; 
 }
 </style>
-
 <script>
 // JavaScript para eliminar cualquier elemento que contenga "github" en su texto o atributos
 document.addEventListener('DOMContentLoaded', function() {
@@ -2314,7 +2367,7 @@ with st.sidebar:
     st.session_state.analisis_suelo = analisis_suelo
     st.markdown("---")
     
-    # === SECCIÓN DE CARGA DE POLÍGONO MEJORADA ===
+    # === SECCIÓN DE CARGA DE POLÍGONO ===
     st.markdown("### 📤 Subir Polígono")
     
     uploaded_file = st.file_uploader(
@@ -2324,12 +2377,10 @@ with st.sidebar:
         key="polygon_uploader"
     )
     
-    # Mostrar información del archivo cargado
     if uploaded_file is not None:
         st.info(f"📄 Archivo: {uploaded_file.name}")
         st.info(f"📊 Tamaño: {uploaded_file.size / 1024:.1f} KB")
         
-        # Botón de carga explícito
         if st.button("🔄 Cargar Polígono", key="load_polygon_btn"):
             with st.spinner("⏳ Procesando polígono..."):
                 gdf = cargar_archivo_plantacion(uploaded_file)
@@ -2337,14 +2388,12 @@ with st.sidebar:
                     st.success("✅ Polígono cargado correctamente")
                     st.rerun()
     
-    # Mostrar estado actual
     if st.session_state.get('archivo_cargado', False):
         st.success("✅ Polígono cargado en memoria")
         if st.session_state.get('gdf_original') is not None:
             area = calcular_superficie(st.session_state.gdf_original)
             st.metric("Área", f"{area:.2f} ha")
     
-    # Debug info (opcional, se puede eliminar después)
     with st.expander("🔧 Debug - Estado del polígono"):
         if st.session_state.get('gdf_original') is None:
             st.warning("⚠️ No hay polígono en session_state")
@@ -2368,7 +2417,6 @@ if st.session_state.archivo_cargado and st.session_state.gdf_original is not Non
         st.write(f"- **Área total:** {area_total:.1f} ha")
         st.write(f"- **Cultivo:** {st.session_state.cultivo_seleccionado}")
         st.write(f"- **Bloques configurados:** {st.session_state.n_divisiones}")
-        # Mostrar un mapa interactivo del polígono cargado
         st.markdown("#### 🗺️ Vista previa del polígono")
         try:
             m_preview = folium.Map(location=[gdf.geometry.centroid.y.iloc[0], gdf.geometry.centroid.x.iloc[0]], zoom_start=15, tiles=None)
@@ -2393,7 +2441,6 @@ if st.session_state.archivo_cargado and st.session_state.gdf_original is not Non
                     ejecutar_analisis_completo()
                     st.rerun()
 else:
-    # Si no hay archivo cargado, mostrar un mensaje amigable
     st.info("👆 Por favor, sube un archivo de la parcela en la barra lateral para comenzar.")
     st.markdown("""
     ### ¿Cómo empezar?
@@ -2402,9 +2449,8 @@ else:
     3. Configura los parámetros de análisis.
     4. Haz clic en **EJECUTAR ANÁLISIS** para obtener resultados.
     """)
-    # Mensaje específico para modo DEMO
     if st.session_state.demo_mode:
-        st.info("🎮 Estás en modo DEMO. **Sube tu propio archivo** (KML, KMZ o ZIP con shapefile) para ejecutar el análisis con datos simulados.")
+        st.info("🎮 Estás en modo DEMO. **Sube tu propio archivo** para ejecutar el análisis con datos simulados.")
 
 # ===== PESTAÑAS DE RESULTADOS =====
 if st.session_state.analisis_completado:
@@ -2414,8 +2460,8 @@ if st.session_state.analisis_completado:
     if gdf_completo is not None:
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
             "📊 Resumen", "🗺️ Mapas", "🛰️ Índices", 
-            "🌤️ Clima", "🌱 Detección con imágenes", "🧪 Fertilidad NPK", 
-            "🌱 Textura Suelo", "🗺️ Curvas de Nivel", "🐛 Detección YOLO (enfermedades)", "💰 Análisis de Costos"
+            "🌤️ Clima", "🌱 Detección (imágenes)", "🧪 Fertilidad NPK", 
+            "🌱 Textura Suelo", "🗺️ Curvas de Nivel", "🛰️ Detección satelital YOLO", "💰 Análisis de Costos"
         ])
         
         with tab1:
@@ -2602,10 +2648,10 @@ if st.session_state.analisis_completado:
         with tab5:
             st.subheader("🌱 Detección de plantas con imágenes RGB (YOLO)")
             st.markdown("""
-            Esta herramienta utiliza modelos YOLO para detectar plantas en imágenes aéreas o de campo.
+            Esta herramienta permite cargar una imagen de campo (RGB) y un modelo YOLO para detectar plantas, malezas u otros objetos.
             - **Sube una imagen** (JPG, PNG) de la parcela.
-            - **Carga un modelo YOLO** pre-entrenado para detección de plantas (formato `.pt` de PyTorch o `.onnx`).
-            - Ajusta el **umbral de confianza** para filtrar detecciones débiles.
+            - **Carga un modelo YOLO** pre-entrenado (formato `.pt` de PyTorch o `.onnx`).
+            - Ajusta el **umbral de confianza**.
             """)
 
             try:
@@ -2623,7 +2669,7 @@ if st.session_state.analisis_completado:
                 with col2:
                     archivo_modelo = st.file_uploader("🤖 Cargar modelo YOLO (.pt o .onnx)", type=['pt', 'onnx'], key="yolo_model_plantas")
 
-                umbral_confianza = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05)
+                umbral_confianza = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05, key="umbral_plantas")
 
                 if archivo_imagen is not None and archivo_modelo is not None:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(archivo_modelo.name)[1]) as tmp_model:
@@ -2729,7 +2775,7 @@ if st.session_state.analisis_completado:
                 st.info("Ejecute el análisis completo para ver los datos de fertilidad.")
         
         with tab7:
-            st.subheader("🌱 ANÁLISIS DE TEXTURA DE SUELO MEJORADO")
+            st.subheader("🌱 ANÁLISIS DE TEXTURA DE SUELO")
             textura_por_bloque = st.session_state.get('textura_por_bloque', [])
             if textura_por_bloque:
                 df_textura = pd.DataFrame(textura_por_bloque)
@@ -2781,7 +2827,7 @@ if st.session_state.analisis_completado:
                 st.info("Ejecute el análisis completo para ver el análisis de textura del suelo.")
         
         with tab8:
-            st.subheader("🗺️ CURVAS DE NIVEL MEJORADAS")
+            st.subheader("🗺️ CURVAS DE NIVEL")
             if st.session_state.demo_mode:
                 st.info("ℹ️ En modo DEMO se muestran curvas de nivel simuladas. Para curvas reales, adquiere la suscripción PREMIUM.")
             st.markdown("""
@@ -2830,88 +2876,60 @@ if st.session_state.analisis_completado:
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
         with tab9:
-            st.subheader("🐛 Detección de Enfermedades y Plagas con YOLO")
+            st.subheader("🛰️ Detección automática con imágenes satelitales MODIS")
             if st.session_state.demo_mode:
-                st.warning("⚠️ La detección YOLO solo está disponible en modo PREMIUM. Adquiere una suscripción para usar esta función.")
+                st.warning("⚠️ Esta función solo está disponible en modo PREMIUM. Adquiere una suscripción para usarla.")
             else:
                 st.markdown("""
-                Esta herramienta utiliza modelos YOLO para detectar automáticamente signos de enfermedades o plagas en imágenes de cultivos.
-                - **Sube una imagen** (JPG, PNG) tomada con drone o cámara.
-                - **Carga un modelo YOLO** pre-entrenado (formato `.pt` de PyTorch o `.onnx`).
-                - Ajusta el **umbral de confianza** para filtrar detecciones débiles.
+                Esta herramienta descarga automáticamente una imagen RGB de MODIS (producto MOD09GA) para el área de tu parcela
+                y luego ejecuta un modelo YOLO para detectar posibles zonas afectadas por enfermedades o estrés.
+                
+                **Requisitos:** 
+                - Haber ejecutado el análisis completo (para definir el área y fechas).
+                - Tener cargado un modelo YOLO previamente (puedes cargarlo en la pestaña anterior).
                 """)
-
-                try:
-                    from ultralytics import YOLO
-                    YOLO_AVAILABLE = True
-                except ImportError:
-                    YOLO_AVAILABLE = False
-
-                if not YOLO_AVAILABLE:
-                    st.error("⚠️ La librería 'ultralytics' no está instalada. Para usar esta función, ejecuta: `pip install ultralytics`")
-                else:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        archivo_imagen = st.file_uploader("📸 Subir imagen", type=['jpg', 'jpeg', 'png'], key="yolo_img_enfermedades")
-                    with col2:
-                        archivo_modelo = st.file_uploader("🤖 Cargar modelo YOLO (.pt o .onnx)", type=['pt', 'onnx'], key="yolo_model_enfermedades")
-
-                    umbral_confianza = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05)
-
-                    if archivo_imagen is not None and archivo_modelo is not None:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(archivo_modelo.name)[1]) as tmp_model:
-                            tmp_model.write(archivo_modelo.read())
-                            ruta_modelo_tmp = tmp_model.name
-
-                        imagen_bytes = archivo_imagen.read()
-                        imagen_pil = Image.open(io.BytesIO(imagen_bytes))
-                        imagen_cv = cv2.cvtColor(np.array(imagen_pil), cv2.COLOR_RGB2BGR)
-
-                        modelo = cargar_modelo_yolo(ruta_modelo_tmp)
-
-                        if modelo is not None:
-                            st.info("🔄 Ejecutando inferencia...")
-                            resultados_yolo = detectar_en_imagen(modelo, imagen_cv, conf_threshold=umbral_confianza)
-
-                            if resultados_yolo and len(resultados_yolo) > 0:
-                                img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados_yolo)
-
-                                st.success(f"✅ Se detectaron {len(detecciones)} objetos.")
-
-                                img_rgb = cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB)
-                                st.image(img_rgb, caption="Imagen con detecciones", use_container_width=True)
-
-                                leyenda_html = crear_leyenda_html(detecciones)
-                                st.markdown(leyenda_html, unsafe_allow_html=True)
-
-                                st.markdown("### 📥 Exportar resultados")
-                                img_pil_export = Image.fromarray(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB))
-                                buf = io.BytesIO()
-                                img_pil_export.save(buf, format='PNG')
-                                byte_im = buf.getvalue()
-
-                                df_detecciones = pd.DataFrame(detecciones)
-                                if 'color' in df_detecciones.columns:
-                                    df_detecciones = df_detecciones.drop(columns=['color'])
-                                csv_detecciones = df_detecciones.to_csv(index=False)
-
-                                col_dl1, col_dl2 = st.columns(2)
-                                with col_dl1:
-                                    st.download_button("📸 Imagen anotada (PNG)", byte_im,
-                                                       f"deteccion_enfermedades_{datetime.now():%Y%m%d_%H%M%S}.png",
-                                                       "image/png")
-                                with col_dl2:
-                                    st.download_button("📊 CSV detecciones", csv_detecciones,
-                                                       f"detecciones_{datetime.now():%Y%m%d_%H%M%S}.csv",
-                                                       "text/csv")
-                            else:
-                                st.warning("No se detectaron objetos con el umbral de confianza actual.")
-                        else:
-                            st.error("No se pudo cargar el modelo. Asegúrate de que sea un archivo válido.")
-
-                        os.unlink(ruta_modelo_tmp)
+                
+                # Opción para cargar el modelo aquí también
+                archivo_modelo_sat = st.file_uploader("🤖 Cargar modelo YOLO (.pt o .onnx) para detección satelital", type=['pt', 'onnx'], key="yolo_model_sat")
+                if archivo_modelo_sat is not None:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(archivo_modelo_sat.name)[1]) as tmp_model:
+                        tmp_model.write(archivo_modelo_sat.read())
+                        ruta_modelo_tmp = tmp_model.name
+                    modelo = cargar_modelo_yolo(ruta_modelo_tmp)
+                    if modelo is not None:
+                        st.session_state.modelo_yolo_sat = modelo
+                        st.success("Modelo cargado correctamente.")
+                    os.unlink(ruta_modelo_tmp)
+                
+                umbral_confianza_sat = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05, key="umbral_sat")
+                
+                if st.button("🚀 Descargar imagen MODIS y detectar"):
+                    if st.session_state.gdf_original is None:
+                        st.error("Primero debes cargar un polígono.")
+                    elif st.session_state.modelo_yolo_sat is None:
+                        st.error("Debes cargar un modelo YOLO.")
                     else:
-                        st.info("👆 Sube una imagen y un modelo YOLO para comenzar.")
+                        with st.spinner("Descargando imagen RGB desde MODIS..."):
+                            ruta_img = obtener_rgb_earthdata(
+                                st.session_state.gdf_original,
+                                st.session_state.fecha_inicio,
+                                st.session_state.fecha_fin
+                            )
+                            if ruta_img and os.path.exists(ruta_img):
+                                st.success("Imagen descargada. Procesando con YOLO...")
+                                imagen_cv = cv2.imread(ruta_img)
+                                resultados = detectar_en_imagen(st.session_state.modelo_yolo_sat, imagen_cv, conf_threshold=umbral_confianza_sat)
+                                if resultados and len(resultados) > 0:
+                                    img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados)
+                                    st.image(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB), caption="Detecciones en imagen MODIS", use_container_width=True)
+                                    leyenda_html = crear_leyenda_html(detecciones)
+                                    st.markdown(leyenda_html, unsafe_allow_html=True)
+                                else:
+                                    st.warning("No se detectaron objetos con el umbral actual.")
+                                # Limpiar archivo temporal
+                                os.remove(ruta_img)
+                            else:
+                                st.error("No se pudo obtener la imagen MODIS.")
         
         with tab10:
             st.subheader("💰 Análisis de Costos de Producción")
@@ -2922,12 +2940,6 @@ if st.session_state.analisis_completado:
                 # Parámetros editables
                 with st.expander("⚙️ Ajustar parámetros de costos y precios"):
                     st.markdown("#### Costos por hectárea (USD)")
-                    costos_base = {
-                        'Trigo': {},
-                        'Maíz': {},
-                        'Soja': {},
-                        'Girasol': {}
-                    }
                     col_c1, col_c2 = st.columns(2)
                     with col_c1:
                         semilla = st.number_input("Semilla (USD/ha)", value=80 if cultivo=='Trigo' else 120 if cultivo=='Maíz' else 100 if cultivo=='Soja' else 90, step=5)
