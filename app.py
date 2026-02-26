@@ -2987,61 +2987,112 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-        with tab9:
-            st.subheader("🛰️ Detección automática con imágenes satelitales MODIS")
+                with tab9:
+            st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS)")
             if st.session_state.demo_mode:
-                st.warning("⚠️ Esta función solo está disponible en modo PREMIUM. Adquiere una suscripción para usarla.")
+                st.info("ℹ️ Modo DEMO: se generará una imagen simulada. Para imágenes reales, adquiere la suscripción PREMIUM.")
             else:
                 st.markdown("""
-                Esta herramienta descarga automáticamente una imagen RGB de MODIS (producto MOD09GA) para el área de tu parcela
-                y luego ejecuta un modelo YOLO para detectar posibles zonas afectadas por enfermedades o estrés.
-                
-                **Requisitos:** 
-                - Haber ejecutado el análisis completo (para definir el área y fechas).
-                - Tener cargado un modelo YOLO previamente (puedes cargarlo en la pestaña anterior).
+                Esta herramienta descarga una imagen RGB de MODIS (producto MOD09GA) para el área de tu parcela en las fechas seleccionadas.
+                Puedes descargar la imagen y luego analizarla con YOLO (cargando un modelo en la pestaña anterior o aquí mismo).
                 """)
-                
-                # Opción para cargar el modelo aquí también
-                archivo_modelo_sat = st.file_uploader("🤖 Cargar modelo YOLO (.pt o .onnx) para detección satelital", type=['pt', 'onnx'], key="yolo_model_sat")
-                if archivo_modelo_sat is not None:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(archivo_modelo_sat.name)[1]) as tmp_model:
-                        tmp_model.write(archivo_modelo_sat.read())
-                        ruta_modelo_tmp = tmp_model.name
-                    modelo = cargar_modelo_yolo(ruta_modelo_tmp)
-                    if modelo is not None:
-                        st.session_state.modelo_yolo_sat = modelo
-                        st.success("Modelo cargado correctamente.")
-                    os.unlink(ruta_modelo_tmp)
-                
-                umbral_confianza_sat = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05, key="umbral_sat")
-                
-                if st.button("🚀 Descargar imagen MODIS y detectar"):
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📥 Descargar imagen MODIS", use_container_width=True):
                     if st.session_state.gdf_original is None:
                         st.error("Primero debes cargar un polígono.")
-                    elif st.session_state.modelo_yolo_sat is None:
-                        st.error("Debes cargar un modelo YOLO.")
                     else:
                         with st.spinner("Descargando imagen RGB desde MODIS..."):
-                            ruta_img = obtener_rgb_earthdata(
-                                st.session_state.gdf_original,
-                                st.session_state.fecha_inicio,
-                                st.session_state.fecha_fin
-                            )
-                            if ruta_img and os.path.exists(ruta_img):
-                                st.success("Imagen descargada. Procesando con YOLO...")
-                                imagen_cv = cv2.imread(ruta_img)
-                                resultados = detectar_en_imagen(st.session_state.modelo_yolo_sat, imagen_cv, conf_threshold=umbral_confianza_sat)
-                                if resultados and len(resultados) > 0:
-                                    img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados)
-                                    st.image(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB), caption="Detecciones en imagen MODIS", use_container_width=True)
-                                    leyenda_html = crear_leyenda_html(detecciones)
-                                    st.markdown(leyenda_html, unsafe_allow_html=True)
-                                else:
-                                    st.warning("No se detectaron objetos con el umbral actual.")
-                                # Limpiar archivo temporal
-                                os.remove(ruta_img)
+                            if st.session_state.demo_mode:
+                                # Generar imagen simulada
+                                from PIL import Image, ImageDraw
+                                img = Image.new('RGB', (512, 512), color='green')
+                                draw = ImageDraw.Draw(img)
+                                draw.rectangle([100,100,400,400], outline='yellow', width=5)
+                                buf = io.BytesIO()
+                                img.save(buf, format='PNG')
+                                buf.seek(0)
+                                st.session_state.rgb_img_bytes = buf.getvalue()
+                                st.session_state.rgb_img_path = None
+                                st.success("Imagen simulada generada.")
                             else:
-                                st.error("No se pudo obtener la imagen MODIS.")
+                                ruta_img = obtener_rgb_earthdata(
+                                    st.session_state.gdf_original,
+                                    st.session_state.fecha_inicio,
+                                    st.session_state.fecha_fin
+                                )
+                                if ruta_img and os.path.exists(ruta_img):
+                                    with open(ruta_img, 'rb') as f:
+                                        st.session_state.rgb_img_bytes = f.read()
+                                    st.session_state.rgb_img_path = ruta_img
+                                    st.success("Imagen descargada correctamente.")
+                                else:
+                                    st.error("No se pudo obtener la imagen MODIS.")
+
+            with col2:
+                if st.session_state.get('rgb_img_bytes') is not None:
+                    st.download_button(
+                        label="💾 Guardar imagen en disco",
+                        data=st.session_state.rgb_img_bytes,
+                        file_name=f"imagen_modis_{datetime.now():%Y%m%d_%H%M%S}.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
+
+            st.markdown("---")
+            st.markdown("### 🤖 Ejecutar YOLO sobre la imagen descargada")
+
+            archivo_modelo_sat = st.file_uploader("Cargar modelo YOLO (.pt o .onnx)", type=['pt', 'onnx'], key="yolo_model_sat")
+            if archivo_modelo_sat is not None:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(archivo_modelo_sat.name)[1]) as tmp_model:
+                    tmp_model.write(archivo_modelo_sat.read())
+                    ruta_modelo_tmp = tmp_model.name
+                modelo = cargar_modelo_yolo(ruta_modelo_tmp)
+                if modelo is not None:
+                    st.session_state.modelo_yolo_sat = modelo
+                    st.success("Modelo cargado correctamente.")
+                os.unlink(ruta_modelo_tmp)
+
+            umbral_confianza_sat = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05, key="umbral_sat_ejecutar")
+
+            if st.button("🚀 Ejecutar YOLO sobre la imagen descargada", use_container_width=True):
+                if st.session_state.get('rgb_img_bytes') is None:
+                    st.error("Primero debes descargar una imagen (botón 'Descargar imagen MODIS').")
+                elif st.session_state.get('modelo_yolo_sat') is None:
+                    st.error("Debes cargar un modelo YOLO.")
+                else:
+                    img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes))
+                    imagen_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+                    resultados = detectar_en_imagen(st.session_state.modelo_yolo_sat, imagen_cv, conf_threshold=umbral_confianza_sat)
+                    if resultados and len(resultados) > 0:
+                        img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados)
+                        st.image(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB), caption="Detecciones", use_container_width=True)
+                        leyenda_html = crear_leyenda_html(detecciones)
+                        st.markdown(leyenda_html, unsafe_allow_html=True)
+
+                        img_pil_anotada = Image.fromarray(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB))
+                        buf_anotada = io.BytesIO()
+                        img_pil_anotada.save(buf_anotada, format='PNG')
+                        st.download_button("📸 Descargar imagen anotada", buf_anotada.getvalue(),
+                                           f"yolo_resultado_{datetime.now():%Y%m%d_%H%M%S}.png", "image/png")
+
+                        df_detecciones = pd.DataFrame(detecciones)
+                        if 'color' in df_detecciones.columns:
+                            df_detecciones = df_detecciones.drop(columns=['color'])
+                        st.dataframe(df_detecciones)
+                        csv_detecciones = df_detecciones.to_csv(index=False)
+                        st.download_button("📊 Descargar CSV detecciones", csv_detecciones,
+                                           f"detecciones_{datetime.now():%Y%m%d_%H%M%S}.csv", "text/csv")
+                    else:
+                        st.warning("No se detectaron objetos con el umbral actual.")
+
+            if st.session_state.get('rgb_img_path') and os.path.exists(st.session_state.rgb_img_path):
+                if st.button("🗑️ Eliminar imagen temporal"):
+                    os.remove(st.session_state.rgb_img_path)
+                    st.session_state.rgb_img_path = None
+                    st.session_state.rgb_img_bytes = None
+                    st.success("Imagen eliminada.")
         
         with tab10:
             st.subheader("💰 Análisis de Costos de Producción")
