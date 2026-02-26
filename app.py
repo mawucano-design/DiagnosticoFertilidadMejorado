@@ -2987,7 +2987,7 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-                with tab9:
+        with tab9:
             st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS)")
             if st.session_state.demo_mode:
                 st.info("ℹ️ Modo DEMO: se generará una imagen simulada. Para imágenes reales, adquiere la suscripción PREMIUM.")
