@@ -1136,14 +1136,23 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
                 st.error("No se encontraron todas las bandas RGB.")
                 return None
 
-            # Validar dimensiones de las bandas
-            for key in ['R','G','B']:
-                # Asegurar 2 dimensiones
-                if bandas[key].ndim > 2:
-                    bandas[key] = np.squeeze(bandas[key])
-                if bandas[key].ndim != 2:
-                    st.error(f"La banda {key} tiene {bandas[key].ndim} dimensiones, se esperaba 2.")
+            # Procesar cada banda para asegurar 2 dimensiones
+            for key in ['R', 'G', 'B']:
+                banda = np.squeeze(bandas[key])  # elimina dimensiones de tamaño 1
+                if banda.ndim == 1:
+                    # Si sigue siendo 1D, intentar remodelar a 2D si es cuadrado perfecto
+                    # (esto es poco probable, pero se intenta)
+                    size = banda.shape[0]
+                    side = int(np.sqrt(size))
+                    if side * side == size:
+                        banda = banda.reshape(side, side)
+                    else:
+                        st.error(f"La banda {key} tiene forma 1D {banda.shape} y no se puede remodelar a 2D.")
+                        return None
+                elif banda.ndim > 2:
+                    st.error(f"La banda {key} tiene {banda.ndim} dimensiones después de squeeze, se esperaba 2.")
                     return None
+                bandas[key] = banda
 
             # Verificar que todas tengan la misma forma
             shape_r = bandas['R'].shape
@@ -1158,13 +1167,11 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
 
             # Escalar a 8 bits usando percentiles para mejorar contraste
             def scale_band(band):
-                # Usar solo valores positivos (válidos)
                 valid = band[band > 0]
                 if len(valid) == 0:
                     return np.zeros_like(band, dtype=np.uint8)
                 p2 = np.percentile(valid, 2)
                 p98 = np.percentile(valid, 98)
-                # Evitar división por cero
                 if p98 - p2 < 1e-6:
                     scaled = np.zeros_like(band, dtype=np.uint8)
                 else:
