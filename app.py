@@ -1136,9 +1136,24 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
                 st.error("No se encontraron todas las bandas RGB.")
                 return None
 
-            # Verificar que las bandas tengan datos
-            if bandas['R'].size == 0 or bandas['G'].size == 0 or bandas['B'].size == 0:
-                st.error("Una o más bandas están vacías.")
+            # Validar dimensiones de las bandas
+            for key in ['R','G','B']:
+                # Asegurar 2 dimensiones
+                if bandas[key].ndim > 2:
+                    bandas[key] = np.squeeze(bandas[key])
+                if bandas[key].ndim != 2:
+                    st.error(f"La banda {key} tiene {bandas[key].ndim} dimensiones, se esperaba 2.")
+                    return None
+
+            # Verificar que todas tengan la misma forma
+            shape_r = bandas['R'].shape
+            if bandas['G'].shape != shape_r or bandas['B'].shape != shape_r:
+                st.error(f"Las bandas RGB no tienen las mismas dimensiones: R={shape_r}, G={bandas['G'].shape}, B={bandas['B'].shape}")
+                return None
+
+            # Verificar que la imagen tenga al menos 10x10 píxeles
+            if shape_r[0] < 10 or shape_r[1] < 10:
+                st.error(f"La imagen es demasiado pequeña: {shape_r[0]}x{shape_r[1]}. Se requiere al menos 10x10.")
                 return None
 
             # Escalar a 8 bits usando percentiles para mejorar contraste
@@ -1160,12 +1175,13 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
             g_8 = scale_band(bandas['G'])
             b_8 = scale_band(bandas['B'])
 
-            # Verificar dimensiones
-            if r_8.shape != g_8.shape or r_8.shape != b_8.shape:
-                st.error("Las bandas tienen diferentes dimensiones.")
-                return None
-
+            # Apilar en RGB
             rgb = np.stack([r_8, g_8, b_8], axis=-1)
+
+            # Verificar forma final
+            if rgb.ndim != 3 or rgb.shape[2] != 3:
+                st.error(f"La imagen RGB final tiene forma incorrecta: {rgb.shape}")
+                return None
 
             # Guardar como PNG temporal
             img_path = os.path.join(temp_dir, "rgb_modis.png")
@@ -3054,7 +3070,7 @@ if st.session_state.analisis_completado:
                             st.error("La imagen OpenCV tiene dimensiones cero.")
                             st.stop()
 
-                        # Mostrar dimensiones para depuración (opcional)
+                        # Mostrar dimensiones para depuración
                         st.write(f"Dimensiones de la imagen: {imagen_cv.shape}")
 
                     except Exception as e:
