@@ -2966,11 +2966,12 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-        with tab8:
+               with tab8:
             st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS vía NASA GIBS)")
             st.markdown("""
-            Esta herramienta obtiene una imagen RGB de MODIS (producto MOD09GA) utilizando el servicio WMS de NASA GIBS.
-            La imagen se recorta automáticamente al área de tu parcela y se puede descargar para luego analizarla con YOLO.
+            Esta herramienta obtiene una imagen RGB de MODIS utilizando el servicio WMS de NASA GIBS.
+            La imagen se recorta al área de tu parcela y se puede descargar para luego analizarla con YOLO.
+            Si la obtención real falla, se generará una imagen simulada para pruebas.
             """)
 
             col1, col2 = st.columns(2)
@@ -2996,73 +2997,69 @@ if st.session_state.analisis_completado:
                                 # Obtener bounding box del polígono
                                 gdf = st.session_state.gdf_original
                                 bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
+                                # Validar bounds
+                                if bounds[0] < -180 or bounds[2] > 180 or bounds[1] < -90 or bounds[3] > 90:
+                                    st.error("Las coordenadas del polígono están fuera de rango para WGS84.")
+                                    st.stop()
                                 # Ampliar un poco el bbox para tener contexto
                                 dx = (bounds[2] - bounds[0]) * 0.1
                                 dy = (bounds[3] - bounds[1]) * 0.1
                                 bbox = (bounds[0] - dx, bounds[1] - dy, bounds[2] + dx, bounds[3] + dy)
-                                # Calcular centroide
-                                centroide = gdf.geometry.centroid.iloc[0]
-                                lat = centroide.y
-                                lon = centroide.x
                                 # Determinar tamaño de imagen (ancho/alto proporcional)
                                 width = 800
                                 height = int(width * (bbox[3] - bbox[1]) / (bbox[2] - bbox[0]))
                                 height = max(height, 400)  # mínimo 400
                                 # URL WMS de GIBS
                                 url = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
-                                params = {
-                                    "service": "WMS",
-                                    "request": "GetMap",
-                                    "layers": "MOD09GA_Nadir_Reflectance_Bands143",  # RGB
-                                    "bbox": f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}",
-                                    "width": width,
-                                    "height": height,
-                                    "format": "image/png",
-                                    "crs": "EPSG:4326",
-                                    "transparent": "TRUE",
-                                    "version": "1.3.0"
-                                }
-                                # Autenticación (usar credenciales Earthdata)
-                                try:
-                                    response = requests.get(url, params=params, auth=(EARTHDATA_USERNAME, EARTHDATA_PASSWORD), timeout=30)
-                                    if response.status_code == 200:
-                                        # Verificar que sea una imagen PNG (cabecera)
-                                        content = response.content
-                                        if content[:8] == b'\x89PNG\r\n\x1a\n':
-                                            st.session_state.rgb_img_bytes = content
-                                            st.session_state.rgb_img_path = None
-                                            st.success("Imagen obtenida correctamente.")
+                                # Lista de layers a probar (en orden de preferencia)
+                                layers_to_try = [
+                                    "MODIS_Terra_CorrectedReflectance_TrueColor",
+                                    "MODIS_Aqua_CorrectedReflectance_TrueColor",
+                                    "MOD09GA_Nadir_Reflectance_Bands143"
+                                ]
+                                imagen_obtenida = False
+                                error_messages = []
+                                for layer in layers_to_try:
+                                    params = {
+                                        "service": "WMS",
+                                        "request": "GetMap",
+                                        "layers": layer,
+                                        "bbox": f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}",
+                                        "width": width,
+                                        "height": height,
+                                        "format": "image/png",
+                                        "crs": "EPSG:4326",
+                                        "transparent": "TRUE",
+                                        "version": "1.3.0"
+                                    }
+                                    # Construir URL para depuración (opcional)
+                                    # st.write(f"Probando layer: {layer}")
+                                    try:
+                                        response = requests.get(url, params=params, auth=(EARTHDATA_USERNAME, EARTHDATA_PASSWORD), timeout=30)
+                                        if response.status_code == 200:
+                                            # Verificar que el contenido sea una imagen PNG
+                                            if response.headers.get('content-type', '').startswith('image/'):
+                                                st.session_state.rgb_img_bytes = response.content
+                                                st.session_state.rgb_img_path = None
+                                                st.success(f"Imagen obtenida correctamente con layer {layer}.")
+                                                imagen_obtenida = True
+                                                break
+                                            else:
+                                                error_messages.append(f"Layer {layer}: respuesta no es imagen (content-type: {response.headers.get('content-type')})")
                                         else:
-                                            st.error("La respuesta no es una imagen PNG válida.")
-                                            # Opcional: mostrar los primeros caracteres para depuración
-                                            st.text(f"Respuesta (primeros 100 bytes): {content[:100]}")
-                                            # Fallback a simulación
-                                            st.info("Generando imagen simulada como fallback...")
-                                            from PIL import Image, ImageDraw
-                                            img = Image.new('RGB', (512, 512), color='green')
-                                            draw = ImageDraw.Draw(img)
-                                            draw.rectangle([100,100,400,400], outline='yellow', width=5)
-                                            buf = io.BytesIO()
-                                            img.save(buf, format='PNG')
-                                            buf.seek(0)
-                                            st.session_state.rgb_img_bytes = buf.getvalue()
-                                            st.session_state.rgb_img_path = None
-                                            st.success("Imagen simulada generada (fallback).")
-                                    else:
-                                        st.error(f"Error del servidor WMS: {response.status_code} - {response.reason}")
-                                        st.info("Generando imagen simulada como fallback...")
-                                        from PIL import Image, ImageDraw
-                                        img = Image.new('RGB', (512, 512), color='green')
-                                        draw = ImageDraw.Draw(img)
-                                        draw.rectangle([100,100,400,400], outline='yellow', width=5)
-                                        buf = io.BytesIO()
-                                        img.save(buf, format='PNG')
-                                        buf.seek(0)
-                                        st.session_state.rgb_img_bytes = buf.getvalue()
-                                        st.session_state.rgb_img_path = None
-                                        st.success("Imagen simulada generada (fallback).")
-                                except Exception as e:
-                                    st.error(f"Error de conexión: {str(e)}")
+                                            error_messages.append(f"Layer {layer}: código {response.status_code} - {response.reason}")
+                                            # Intentar extraer mensaje de error del XML
+                                            try:
+                                                if 'xml' in response.headers.get('content-type', ''):
+                                                    # Podríamos parsear, pero por ahora solo mostramos el texto
+                                                    error_messages.append(f"  Respuesta: {response.text[:200]}")
+                                            except:
+                                                pass
+                                    except Exception as e:
+                                        error_messages.append(f"Layer {layer}: error de conexión - {str(e)}")
+
+                                if not imagen_obtenida:
+                                    st.error("No se pudo obtener una imagen real de GIBS. Motivos:\n" + "\n".join(error_messages))
                                     st.info("Generando imagen simulada como fallback...")
                                     from PIL import Image, ImageDraw
                                     img = Image.new('RGB', (512, 512), color='green')
@@ -3116,8 +3113,8 @@ if st.session_state.analisis_completado:
                         # Usar OpenCV para decodificar directamente desde bytes
                         img_array = np.frombuffer(st.session_state.rgb_img_bytes, np.uint8)
                         imagen_cv = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-                        if imagen_cv is None or imagen_cv.size == 0:
-                            st.error("No se pudo decodificar la imagen con OpenCV. Puede que los datos estén corruptos.")
+                        if imagen_cv is None:
+                            st.error("No se pudo decodificar la imagen con OpenCV. Verifica que sea una imagen válida.")
                             st.stop()
                         st.write(f"Dimensiones de la imagen: {imagen_cv.shape}")
                     except Exception as e:
