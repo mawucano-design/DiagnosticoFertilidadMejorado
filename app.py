@@ -1044,7 +1044,7 @@ def obtener_ndwi_earthdata(gdf_dividido, fecha_inicio, fecha_fin):
         st.error(f"Error en obtención de NDWI con earthaccess: {str(e)}")
         return None, None
 
-# ===== NUEVA FUNCIÓN: OBTENER IMAGEN RGB DE MODIS =====
+# ===== FUNCIÓN MEJORADA: OBTENER IMAGEN RGB DE MODIS =====
 def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
     """
     Descarga una imagen RGB de MODIS (MOD09GA, bandas 1,4,3) para el polígono dado.
@@ -1136,6 +1136,11 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
                 st.error("No se encontraron todas las bandas RGB.")
                 return None
 
+            # Verificar que las bandas tengan datos
+            if bandas['R'].size == 0 or bandas['G'].size == 0 or bandas['B'].size == 0:
+                st.error("Una o más bandas están vacías.")
+                return None
+
             # Escalar a 8 bits usando percentiles para mejorar contraste
             def scale_band(band):
                 # Usar solo valores positivos (válidos)
@@ -1144,18 +1149,33 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
                     return np.zeros_like(band, dtype=np.uint8)
                 p2 = np.percentile(valid, 2)
                 p98 = np.percentile(valid, 98)
-                scaled = np.clip((band - p2) / (p98 - p2), 0, 1) * 255
+                # Evitar división por cero
+                if p98 - p2 < 1e-6:
+                    scaled = np.zeros_like(band, dtype=np.uint8)
+                else:
+                    scaled = np.clip((band - p2) / (p98 - p2), 0, 1) * 255
                 return scaled.astype(np.uint8)
 
             r_8 = scale_band(bandas['R'])
             g_8 = scale_band(bandas['G'])
             b_8 = scale_band(bandas['B'])
 
+            # Verificar dimensiones
+            if r_8.shape != g_8.shape or r_8.shape != b_8.shape:
+                st.error("Las bandas tienen diferentes dimensiones.")
+                return None
+
             rgb = np.stack([r_8, g_8, b_8], axis=-1)
 
             # Guardar como PNG temporal
             img_path = os.path.join(temp_dir, "rgb_modis.png")
-            Image.fromarray(rgb).save(img_path)
+            img_pil = Image.fromarray(rgb)
+            img_pil.save(img_path, format='PNG')
+
+            # Verificar que la imagen guardada sea válida
+            if not os.path.exists(img_path) or os.path.getsize(img_path) < 100:
+                st.error("La imagen generada no es válida (tamaño muy pequeño).")
+                return None
 
             return img_path
 
@@ -2955,9 +2975,14 @@ if st.session_state.analisis_completado:
                                         # Intentar abrir con PIL para validar
                                         test_img = Image.open(io.BytesIO(img_data))
                                         test_img.verify()  # lanza excepción si no es válida
-                                        st.session_state.rgb_img_bytes = img_data
-                                        st.session_state.rgb_img_path = ruta_img
-                                        st.success("Imagen descargada correctamente.")
+                                        # Reabrir después de verify (necesario)
+                                        test_img = Image.open(io.BytesIO(img_data))
+                                        if test_img.width == 0 or test_img.height == 0:
+                                            st.error("La imagen descargada tiene dimensiones cero.")
+                                        else:
+                                            st.session_state.rgb_img_bytes = img_data
+                                            st.session_state.rgb_img_path = ruta_img
+                                            st.success("Imagen descargada correctamente.")
                                     except Exception as e:
                                         st.error(f"El archivo descargado no es una imagen válida: {str(e)}")
                                         st.session_state.rgb_img_bytes = None
@@ -3023,6 +3048,15 @@ if st.session_state.analisis_completado:
                         if imagen_cv is None or imagen_cv.size == 0:
                             st.error("No se pudo convertir la imagen a formato OpenCV.")
                             st.stop()
+
+                        # Verificar dimensiones de la imagen OpenCV
+                        if imagen_cv.shape[0] == 0 or imagen_cv.shape[1] == 0:
+                            st.error("La imagen OpenCV tiene dimensiones cero.")
+                            st.stop()
+
+                        # Mostrar dimensiones para depuración (opcional)
+                        st.write(f"Dimensiones de la imagen: {imagen_cv.shape}")
+
                     except Exception as e:
                         st.error(f"Error al cargar o procesar la imagen: {str(e)}")
                         st.stop()
