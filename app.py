@@ -2966,7 +2966,7 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-               with tab8:
+        with tab8:
             st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS vía NASA GIBS)")
             st.markdown("""
             Esta herramienta obtiene una imagen RGB de MODIS utilizando el servicio WMS de NASA GIBS.
