@@ -2966,7 +2966,7 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-        with tab8:
+               with tab8:
             st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS vía NASA GIBS)")
             st.markdown("""
             Esta herramienta obtiene una imagen RGB de MODIS (producto MOD09GA) utilizando el servicio WMS de NASA GIBS.
@@ -3094,16 +3094,12 @@ if st.session_state.analisis_completado:
                     st.error("Debes cargar un modelo YOLO.")
                 else:
                     try:
-                        img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes)).convert('RGB')
-                        if img_pil.width == 0 or img_pil.height == 0:
-                            st.error("La imagen tiene dimensiones cero.")
+                        # Usar OpenCV para decodificar directamente desde bytes
+                        img_array = np.frombuffer(st.session_state.rgb_img_bytes, np.uint8)
+                        imagen_cv = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                        if imagen_cv is None:
+                            st.error("No se pudo decodificar la imagen con OpenCV.")
                             st.stop()
-                        img_np = np.array(img_pil)
-                        if img_np.ndim == 2:
-                            img_np = np.stack([img_np]*3, axis=-1)
-                        elif img_np.shape[2] == 4:
-                            img_np = img_np[:, :, :3]
-                        imagen_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
                         st.write(f"Dimensiones de la imagen: {imagen_cv.shape}")
                     except Exception as e:
                         st.error(f"Error al procesar la imagen: {str(e)}")
