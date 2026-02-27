@@ -1049,6 +1049,7 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
     """
     Descarga una imagen RGB de MODIS (MOD09GA, bandas 1,4,3) para el polígono dado.
     Retorna la ruta del archivo de imagen (PNG) o None si falla.
+    Intenta primero con rasterio (si está disponible) y luego con pyhdf.
     """
     if not EARTHDATA_OK:
         st.warning("Earthaccess no disponible.")
@@ -1098,134 +1099,120 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
                 st.error("El archivo descargado no es un HDF válido.")
                 return None
 
-            # Función auxiliar para procesar bandas y obtener RGB
-            def procesar_bandas(bandas_dict):
-                # Verificar que tenemos las tres bandas
-                if not all(k in bandas_dict for k in ['R','G','B']):
-                    return None, "No se encontraron todas las bandas RGB."
+            bandas = {}
 
-                # Procesar cada banda para asegurar 2 dimensiones
-                bandas_proc = {}
-                for key in ['R', 'G', 'B']:
-                    banda = bandas_dict[key]
-                    # Aplicar factor de escala si no se hizo antes (asumimos que ya está escalado)
-                    # Asegurar que sea float
-                    banda = banda.astype(np.float32)
-                    
-                    # Eliminar dimensiones de tamaño 1
-                    banda = np.squeeze(banda)
-                    
-                    # Si es 1D, intentar remodelar a 2D buscando dimensiones que coincidan
-                    if banda.ndim == 1:
-                        # Intentar obtener dimensiones de metadatos (no disponible aquí)
-                        # Como último recurso, asumir que es una imagen cuadrada? No.
-                        # Mejor buscar la forma en los metadatos del archivo original.
-                        # Pero no tenemos acceso aquí.
-                        # En su lugar, si el tamaño total es producto de dos números razonables,
-                        # podríamos intentar una descomposición. Pero es complicado.
-                        # Mejor devolver error y pasar a rasterio.
-                        return None, f"La banda {key} es 1D con forma {banda.shape} y no se puede usar."
-                    
-                    if banda.ndim != 2:
-                        return None, f"La banda {key} tiene {banda.ndim} dimensiones, se esperaba 2."
-                    
-                    bandas_proc[key] = banda
-
-                # Verificar que todas tengan la misma forma
-                shape_r = bandas_proc['R'].shape
-                if bandas_proc['G'].shape != shape_r or bandas_proc['B'].shape != shape_r:
-                    return None, f"Las bandas no tienen las mismas dimensiones: R={shape_r}, G={bandas_proc['G'].shape}, B={bandas_proc['B'].shape}"
-
-                if shape_r[0] < 10 or shape_r[1] < 10:
-                    return None, f"La imagen es demasiado pequeña: {shape_r[0]}x{shape_r[1]}. Mínimo 10x10."
-
-                # Escalar a 8 bits
-                def scale_band(band):
-                    valid = band[band > 0]
-                    if len(valid) == 0:
-                        return np.zeros_like(band, dtype=np.uint8)
-                    p2 = np.percentile(valid, 2)
-                    p98 = np.percentile(valid, 98)
-                    if p98 - p2 < 1e-6:
-                        return np.zeros_like(band, dtype=np.uint8)
-                    scaled = np.clip((band - p2) / (p98 - p2), 0, 1) * 255
-                    return scaled.astype(np.uint8)
-
-                r_8 = scale_band(bandas_proc['R'])
-                g_8 = scale_band(bandas_proc['G'])
-                b_8 = scale_band(bandas_proc['B'])
-
-                rgb = np.stack([r_8, g_8, b_8], axis=-1)
-                if rgb.ndim != 3 or rgb.shape[2] != 3:
-                    return None, f"RGB final tiene forma incorrecta: {rgb.shape}"
-
-                return rgb, None
-
-            # Intentar con pyhdf primero
-            if PYHDF_OK:
-                try:
-                    hdf = SD(download_path, SDC.READ)
-                    bandas = {}
-                    for name in hdf.datasets().keys():
-                        if 'sur_refl_b01' in name:
-                            data = hdf.select(name).get()
-                            bandas['R'] = data * 0.0001
-                        elif 'sur_refl_b04' in name:
-                            data = hdf.select(name).get()
-                            bandas['G'] = data * 0.0001
-                        elif 'sur_refl_b03' in name:
-                            data = hdf.select(name).get()
-                            bandas['B'] = data * 0.0001
-                    
-                    rgb, error = procesar_bandas(bandas)
-                    if rgb is not None:
-                        # Guardar imagen
-                        img_path = os.path.join(temp_dir, "rgb_modis.png")
-                        Image.fromarray(rgb).save(img_path)
-                        if os.path.exists(img_path) and os.path.getsize(img_path) > 100:
-                            return img_path
-                        else:
-                            st.error("La imagen generada con pyhdf no es válida.")
-                    else:
-                        st.warning(f"pyhdf falló al procesar bandas: {error}. Intentando con rasterio...")
-                except Exception as e:
-                    st.warning(f"pyhdf falló con excepción: {str(e)}. Intentando con rasterio...")
-
-            # Si pyhdf no funcionó, intentar con rasterio
+            # --- INTENTO CON RASTERIO ---
             if RASTERIO_OK:
                 try:
                     with rasterio.open(download_path) as src:
                         subdatasets = src.subdatasets
-                        bandas = {}
-                        for sd in subdatasets:
-                            if 'sur_refl_b01' in sd:
-                                with rasterio.open(sd) as b:
-                                    arr = b.read(1)
-                                    bandas['R'] = arr * 0.0001
-                            elif 'sur_refl_b04' in sd:
-                                with rasterio.open(sd) as b:
-                                    arr = b.read(1)
-                                    bandas['G'] = arr * 0.0001
-                            elif 'sur_refl_b03' in sd:
-                                with rasterio.open(sd) as b:
-                                    arr = b.read(1)
-                                    bandas['B'] = arr * 0.0001
-                        
-                        rgb, error = procesar_bandas(bandas)
-                        if rgb is not None:
-                            img_path = os.path.join(temp_dir, "rgb_modis.png")
-                            Image.fromarray(rgb).save(img_path)
-                            if os.path.exists(img_path) and os.path.getsize(img_path) > 100:
-                                return img_path
-                            else:
-                                st.error("La imagen generada con rasterio no es válida.")
-                        else:
-                            st.error(f"rasterio falló al procesar bandas: {error}")
+                        if subdatasets:
+                            for sd in subdatasets:
+                                if 'sur_refl_b01' in sd:
+                                    with rasterio.open(sd) as b:
+                                        bandas['R'] = b.read(1).astype(np.float32) * 0.0001
+                                elif 'sur_refl_b04' in sd:
+                                    with rasterio.open(sd) as b:
+                                        bandas['G'] = b.read(1).astype(np.float32) * 0.0001
+                                elif 'sur_refl_b03' in sd:
+                                    with rasterio.open(sd) as b:
+                                        bandas['B'] = b.read(1).astype(np.float32) * 0.0001
                 except Exception as e:
-                    st.error(f"rasterio falló con excepción: {str(e)}")
+                    st.warning(f"rasterio falló con excepción: {str(e)}. Intentando con pyhdf...")
+                    bandas = {}  # reiniciar para intentar con pyhdf
 
-            st.error("No se pudo generar la imagen RGB con ninguno de los métodos.")
-            return None
+            # --- INTENTO CON PYHDF (si rasterio no funcionó) ---
+            if not bandas and PYHDF_OK:
+                try:
+                    hdf = SD(download_path, SDC.READ)
+                    # Obtener nombres de datasets
+                    datasets = hdf.datasets()
+                    # Buscar bandas
+                    for name in datasets.keys():
+                        if 'sur_refl_b01' in name:
+                            sds = hdf.select(name)
+                            # Obtener dimensiones desde atributos si es posible
+                            data = sds.get()
+                            # Escalar
+                            data = data.astype(np.float32) * 0.0001
+                            # Intentar remodelar si es 1D
+                            if data.ndim == 1:
+                                # Leer atributos para obtener dimensiones
+                                attrs = sds.attributes()
+                                # Buscar claves como 'Dimension', 'rows', 'columns', 'tile_att'
+                                rows = attrs.get('rows', None) or attrs.get('nrows', None) or attrs.get('Number_of_rows', None)
+                                cols = attrs.get('columns', None) or attrs.get('ncols', None) or attrs.get('Number_of_columns', None)
+                                if rows and cols:
+                                    try:
+                                        rows = int(rows)
+                                        cols = int(cols)
+                                        if rows * cols == data.size:
+                                            data = data.reshape(rows, cols)
+                                        else:
+                                            st.warning(f"Dimensiones {rows}x{cols} no coinciden con el tamaño {data.size}")
+                                            data = None
+                                    except:
+                                        data = None
+                                else:
+                                    # Si no hay atributos, intentar deducir por tamaño cuadrado
+                                    side = int(np.sqrt(data.size))
+                                    if side * side == data.size:
+                                        data = data.reshape(side, side)
+                                    else:
+                                        st.warning(f"Banda {name} es 1D con {data.size} elementos, no se puede remodelar.")
+                                        data = None
+                            if data is not None and data.ndim == 2:
+                                bandas[name.split('_')[-1][-2:]] = data  # extraer R, G, B
+                            sds.endaccess()
+                    hdf.end()
+                except Exception as e:
+                    st.warning(f"pyhdf falló al procesar bandas: {str(e)}")
+
+            if not all(k in bandas for k in ['R','G','B']):
+                st.error("No se pudieron leer todas las bandas RGB con ninguno de los métodos.")
+                return None
+
+            # Asegurar 2D y misma forma
+            for key in ['R','G','B']:
+                if bandas[key].ndim != 2:
+                    st.error(f"La banda {key} tiene {bandas[key].ndim} dimensiones, se esperaba 2.")
+                    return None
+
+            shape_r = bandas['R'].shape
+            if bandas['G'].shape != shape_r or bandas['B'].shape != shape_r:
+                st.error(f"Las bandas no tienen la misma forma: R={shape_r}, G={bandas['G'].shape}, B={bandas['B'].shape}")
+                return None
+
+            if shape_r[0] < 10 or shape_r[1] < 10:
+                st.error(f"Imagen demasiado pequeña: {shape_r}")
+                return None
+
+            # Escalar a 8 bits
+            def scale_band(band):
+                valid = band[band > 0]
+                if len(valid) == 0:
+                    return np.zeros_like(band, dtype=np.uint8)
+                p2 = np.percentile(valid, 2)
+                p98 = np.percentile(valid, 98)
+                if p98 - p2 < 1e-6:
+                    return np.zeros_like(band, dtype=np.uint8)
+                scaled = np.clip((band - p2) / (p98 - p2), 0, 1) * 255
+                return scaled.astype(np.uint8)
+
+            r_8 = scale_band(bandas['R'])
+            g_8 = scale_band(bandas['G'])
+            b_8 = scale_band(bandas['B'])
+
+            rgb = np.stack([r_8, g_8, b_8], axis=-1)
+
+            img_path = os.path.join(temp_dir, "rgb_modis.png")
+            Image.fromarray(rgb).save(img_path, format='PNG')
+
+            if not os.path.exists(img_path) or os.path.getsize(img_path) < 100:
+                st.error("La imagen generada no es válida.")
+                return None
+
+            return img_path
 
         except Exception as e:
             st.error(f"Error procesando imagen RGB: {str(e)}")
@@ -2979,25 +2966,22 @@ if st.session_state.analisis_completado:
                 if st.session_state.get('curvas_nivel'):
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
-        with tab8:  # Detección satelital YOLO
+        with tab8:
             st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS)")
-            if st.session_state.demo_mode:
-                st.info("ℹ️ Modo DEMO: se generará una imagen simulada. Para imágenes reales, adquiere la suscripción PREMIUM.")
-            else:
-                st.markdown("""
-                Esta herramienta descarga una imagen RGB de MODIS (producto MOD09GA) para el área de tu parcela en las fechas seleccionadas.
-                Puedes descargar la imagen y luego analizarla con YOLO.
-                """)
+            st.markdown("""
+            Esta herramienta descarga una imagen RGB de MODIS (producto MOD09GA) para el área de tu parcela en las fechas seleccionadas.
+            En caso de fallo, puedes generar una imagen simulada para probar el flujo YOLO.
+            """)
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("📥 Descargar imagen MODIS", use_container_width=True):
+                if st.button("📥 Descargar imagen MODIS (real)", use_container_width=True):
                     if st.session_state.gdf_original is None:
                         st.error("Primero debes cargar un polígono.")
                     else:
                         with st.spinner("Descargando imagen RGB desde MODIS..."):
                             if st.session_state.demo_mode:
-                                # Generar imagen simulada
+                                # En DEMO siempre simulada
                                 from PIL import Image, ImageDraw
                                 img = Image.new('RGB', (512, 512), color='green')
                                 draw = ImageDraw.Draw(img)
@@ -3007,7 +2991,7 @@ if st.session_state.analisis_completado:
                                 buf.seek(0)
                                 st.session_state.rgb_img_bytes = buf.getvalue()
                                 st.session_state.rgb_img_path = None
-                                st.success("Imagen simulada generada.")
+                                st.success("Imagen simulada generada (modo DEMO).")
                             else:
                                 ruta_img = obtener_rgb_earthdata(
                                     st.session_state.gdf_original,
@@ -3015,27 +2999,25 @@ if st.session_state.analisis_completado:
                                     st.session_state.fecha_fin
                                 )
                                 if ruta_img and os.path.exists(ruta_img) and os.path.getsize(ruta_img) > 100:
-                                    # Verificar que sea una imagen válida
-                                    try:
-                                        with open(ruta_img, 'rb') as f:
-                                            img_data = f.read()
-                                        # Intentar abrir con PIL para validar
-                                        test_img = Image.open(io.BytesIO(img_data))
-                                        test_img.verify()  # lanza excepción si no es válida
-                                        # Reabrir después de verify (necesario)
-                                        test_img = Image.open(io.BytesIO(img_data))
-                                        if test_img.width == 0 or test_img.height == 0:
-                                            st.error("La imagen descargada tiene dimensiones cero.")
-                                        else:
-                                            st.session_state.rgb_img_bytes = img_data
-                                            st.session_state.rgb_img_path = ruta_img
-                                            st.success("Imagen descargada correctamente.")
-                                    except Exception as e:
-                                        st.error(f"El archivo descargado no es una imagen válida: {str(e)}")
-                                        st.session_state.rgb_img_bytes = None
-                                        st.session_state.rgb_img_path = None
+                                    with open(ruta_img, 'rb') as f:
+                                        st.session_state.rgb_img_bytes = f.read()
+                                    st.session_state.rgb_img_path = ruta_img
+                                    st.success("Imagen descargada correctamente.")
                                 else:
-                                    st.error("No se pudo obtener la imagen MODIS o el archivo está vacío.")
+                                    st.error("No se pudo obtener la imagen MODIS real.")
+                                    # Ofrecer opción de simulación
+                                    if st.button("🎮 Generar imagen simulada como fallback"):
+                                        from PIL import Image, ImageDraw
+                                        img = Image.new('RGB', (512, 512), color='green')
+                                        draw = ImageDraw.Draw(img)
+                                        draw.rectangle([100,100,400,400], outline='yellow', width=5)
+                                        buf = io.BytesIO()
+                                        img.save(buf, format='PNG')
+                                        buf.seek(0)
+                                        st.session_state.rgb_img_bytes = buf.getvalue()
+                                        st.session_state.rgb_img_path = None
+                                        st.success("Imagen simulada generada (fallback).")
+                                        st.rerun()
 
             with col2:
                 if st.session_state.get('rgb_img_bytes') is not None:
@@ -3050,11 +3032,10 @@ if st.session_state.analisis_completado:
             st.markdown("---")
             st.markdown("### 🤖 Ejecutar YOLO sobre la imagen descargada")
 
-            # Mostrar si ya hay un modelo cargado globalmente
             if 'modelo_yolo' in st.session_state and st.session_state.modelo_yolo is not None:
-                st.success("✅ Modelo YOLO ya cargado. Puedes usarlo directamente.")
+                st.success("✅ Modelo YOLO ya cargado.")
             else:
-                st.info("No hay modelo cargado. Sube uno a continuación (quedará disponible globalmente).")
+                st.info("No hay modelo cargado. Sube uno a continuación.")
 
             archivo_modelo_sat = st.file_uploader("Cargar modelo YOLO (.pt o .onnx)", type=['pt', 'onnx'], key="yolo_model_sat")
             if archivo_modelo_sat is not None:
@@ -3064,50 +3045,33 @@ if st.session_state.analisis_completado:
                 modelo = cargar_modelo_yolo(ruta_modelo_tmp)
                 if modelo is not None:
                     st.session_state.modelo_yolo = modelo
-                    st.success("Modelo cargado correctamente y disponible globalmente.")
+                    st.success("Modelo cargado correctamente.")
                 os.unlink(ruta_modelo_tmp)
 
             umbral_confianza_sat = st.slider("Umbral de confianza", min_value=0.1, max_value=0.9, value=0.25, step=0.05, key="umbral_sat_ejecutar")
 
             if st.button("🚀 Ejecutar YOLO sobre la imagen descargada", use_container_width=True):
                 if st.session_state.get('rgb_img_bytes') is None:
-                    st.error("Primero debes descargar una imagen (botón 'Descargar imagen MODIS').")
+                    st.error("Primero debes descargar una imagen (botón 'Descargar imagen MODIS' o generar simulación).")
                 elif st.session_state.get('modelo_yolo') is None:
-                    st.error("Debes cargar un modelo YOLO (sube uno arriba).")
+                    st.error("Debes cargar un modelo YOLO.")
                 else:
                     try:
-                        # Abrir imagen con PIL y asegurar formato RGB
-                        img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes))
-                        if img_pil.mode != 'RGB':
-                            img_pil = img_pil.convert('RGB')
+                        img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes)).convert('RGB')
                         if img_pil.width == 0 or img_pil.height == 0:
-                            st.error("La imagen descargada tiene dimensiones cero.")
+                            st.error("La imagen tiene dimensiones cero.")
                             st.stop()
-                        
-                        # Convertir a numpy array y luego a BGR para OpenCV
                         img_np = np.array(img_pil)
-                        if img_np.ndim == 2:  # escala de grises
+                        if img_np.ndim == 2:
                             img_np = np.stack([img_np]*3, axis=-1)
-                        elif img_np.shape[2] == 4:  # RGBA
+                        elif img_np.shape[2] == 4:
                             img_np = img_np[:, :, :3]
-                        
                         imagen_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-                        if imagen_cv is None or imagen_cv.size == 0:
-                            st.error("No se pudo convertir la imagen a formato OpenCV.")
-                            st.stop()
-
-                        # Verificar dimensiones de la imagen OpenCV
-                        if imagen_cv.shape[0] == 0 or imagen_cv.shape[1] == 0:
-                            st.error("La imagen OpenCV tiene dimensiones cero.")
-                            st.stop()
-
-                        # Mostrar dimensiones para depuración
                         st.write(f"Dimensiones de la imagen: {imagen_cv.shape}")
-
                     except Exception as e:
-                        st.error(f"Error al cargar o procesar la imagen: {str(e)}")
+                        st.error(f"Error al procesar la imagen: {str(e)}")
                         st.stop()
-                    
+
                     resultados = detectar_en_imagen(st.session_state.modelo_yolo, imagen_cv, conf_threshold=umbral_confianza_sat)
                     if resultados and len(resultados) > 0:
                         img_anotada, detecciones = dibujar_detecciones_con_leyenda(imagen_cv, resultados)
@@ -3115,15 +3079,14 @@ if st.session_state.analisis_completado:
                         leyenda_html = crear_leyenda_html(detecciones)
                         st.markdown(leyenda_html, unsafe_allow_html=True)
 
+                        # Botones de descarga
                         img_pil_anotada = Image.fromarray(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB))
                         buf_anotada = io.BytesIO()
                         img_pil_anotada.save(buf_anotada, format='PNG')
                         st.download_button("📸 Descargar imagen anotada", buf_anotada.getvalue(),
                                            f"yolo_resultado_{datetime.now():%Y%m%d_%H%M%S}.png", "image/png")
 
-                        df_detecciones = pd.DataFrame(detecciones)
-                        if 'color' in df_detecciones.columns:
-                            df_detecciones = df_detecciones.drop(columns=['color'])
+                        df_detecciones = pd.DataFrame(detecciones).drop(columns=['color'], errors='ignore')
                         st.dataframe(df_detecciones)
                         csv_detecciones = df_detecciones.to_csv(index=False)
                         st.download_button("📊 Descargar CSV detecciones", csv_detecciones,
