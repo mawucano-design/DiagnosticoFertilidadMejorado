@@ -3026,9 +3026,28 @@ if st.session_state.analisis_completado:
                                 try:
                                     response = requests.get(url, params=params, auth=(EARTHDATA_USERNAME, EARTHDATA_PASSWORD), timeout=30)
                                     if response.status_code == 200:
-                                        st.session_state.rgb_img_bytes = response.content
-                                        st.session_state.rgb_img_path = None
-                                        st.success("Imagen obtenida correctamente.")
+                                        # Verificar que sea una imagen PNG (cabecera)
+                                        content = response.content
+                                        if content[:8] == b'\x89PNG\r\n\x1a\n':
+                                            st.session_state.rgb_img_bytes = content
+                                            st.session_state.rgb_img_path = None
+                                            st.success("Imagen obtenida correctamente.")
+                                        else:
+                                            st.error("La respuesta no es una imagen PNG válida.")
+                                            # Opcional: mostrar los primeros caracteres para depuración
+                                            st.text(f"Respuesta (primeros 100 bytes): {content[:100]}")
+                                            # Fallback a simulación
+                                            st.info("Generando imagen simulada como fallback...")
+                                            from PIL import Image, ImageDraw
+                                            img = Image.new('RGB', (512, 512), color='green')
+                                            draw = ImageDraw.Draw(img)
+                                            draw.rectangle([100,100,400,400], outline='yellow', width=5)
+                                            buf = io.BytesIO()
+                                            img.save(buf, format='PNG')
+                                            buf.seek(0)
+                                            st.session_state.rgb_img_bytes = buf.getvalue()
+                                            st.session_state.rgb_img_path = None
+                                            st.success("Imagen simulada generada (fallback).")
                                     else:
                                         st.error(f"Error del servidor WMS: {response.status_code} - {response.reason}")
                                         st.info("Generando imagen simulada como fallback...")
@@ -3097,8 +3116,8 @@ if st.session_state.analisis_completado:
                         # Usar OpenCV para decodificar directamente desde bytes
                         img_array = np.frombuffer(st.session_state.rgb_img_bytes, np.uint8)
                         imagen_cv = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-                        if imagen_cv is None:
-                            st.error("No se pudo decodificar la imagen con OpenCV.")
+                        if imagen_cv is None or imagen_cv.size == 0:
+                            st.error("No se pudo decodificar la imagen con OpenCV. Puede que los datos estén corruptos.")
                             st.stop()
                         st.write(f"Dimensiones de la imagen: {imagen_cv.shape}")
                     except Exception as e:
