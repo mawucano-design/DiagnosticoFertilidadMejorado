@@ -2967,21 +2967,21 @@ if st.session_state.analisis_completado:
                     st.info("Ya hay curvas de nivel generadas. Presiona el botón para regenerarlas.")
         
         with tab8:
-            st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS)")
+            st.subheader("🛰️ Obtención de imagen satelital RGB (MODIS vía NASA GIBS)")
             st.markdown("""
-            Esta herramienta descarga una imagen RGB de MODIS (producto MOD09GA) para el área de tu parcela en las fechas seleccionadas.
-            En caso de fallo, puedes generar una imagen simulada para probar el flujo YOLO.
+            Esta herramienta obtiene una imagen RGB de MODIS (producto MOD09GA) utilizando el servicio WMS de NASA GIBS.
+            La imagen se recorta automáticamente al área de tu parcela y se puede descargar para luego analizarla con YOLO.
             """)
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("📥 Descargar imagen MODIS (real)", use_container_width=True):
+                if st.button("📥 Obtener imagen MODIS (WMS)", use_container_width=True):
                     if st.session_state.gdf_original is None:
                         st.error("Primero debes cargar un polígono.")
                     else:
-                        with st.spinner("Descargando imagen RGB desde MODIS..."):
+                        with st.spinner("Obteniendo imagen desde NASA GIBS..."):
                             if st.session_state.demo_mode:
-                                # En DEMO siempre simulada
+                                # En DEMO simulada
                                 from PIL import Image, ImageDraw
                                 img = Image.new('RGB', (512, 512), color='green')
                                 draw = ImageDraw.Draw(img)
@@ -2993,20 +2993,45 @@ if st.session_state.analisis_completado:
                                 st.session_state.rgb_img_path = None
                                 st.success("Imagen simulada generada (modo DEMO).")
                             else:
-                                ruta_img = obtener_rgb_earthdata(
-                                    st.session_state.gdf_original,
-                                    st.session_state.fecha_inicio,
-                                    st.session_state.fecha_fin
-                                )
-                                if ruta_img and os.path.exists(ruta_img) and os.path.getsize(ruta_img) > 100:
-                                    with open(ruta_img, 'rb') as f:
-                                        st.session_state.rgb_img_bytes = f.read()
-                                    st.session_state.rgb_img_path = ruta_img
-                                    st.success("Imagen descargada correctamente.")
-                                else:
-                                    st.error("No se pudo obtener la imagen MODIS real.")
-                                    # Ofrecer opción de simulación
-                                    if st.button("🎮 Generar imagen simulada como fallback"):
+                                # Obtener bounding box del polígono
+                                gdf = st.session_state.gdf_original
+                                bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
+                                # Ampliar un poco el bbox para tener contexto
+                                dx = (bounds[2] - bounds[0]) * 0.1
+                                dy = (bounds[3] - bounds[1]) * 0.1
+                                bbox = (bounds[0] - dx, bounds[1] - dy, bounds[2] + dx, bounds[3] + dy)
+                                # Calcular centroide
+                                centroide = gdf.geometry.centroid.iloc[0]
+                                lat = centroide.y
+                                lon = centroide.x
+                                # Determinar tamaño de imagen (ancho/alto proporcional)
+                                width = 800
+                                height = int(width * (bbox[3] - bbox[1]) / (bbox[2] - bbox[0]))
+                                height = max(height, 400)  # mínimo 400
+                                # URL WMS de GIBS
+                                url = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
+                                params = {
+                                    "service": "WMS",
+                                    "request": "GetMap",
+                                    "layers": "MOD09GA_Nadir_Reflectance_Bands143",  # RGB
+                                    "bbox": f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}",
+                                    "width": width,
+                                    "height": height,
+                                    "format": "image/png",
+                                    "crs": "EPSG:4326",
+                                    "transparent": "TRUE",
+                                    "version": "1.3.0"
+                                }
+                                # Autenticación (usar credenciales Earthdata)
+                                try:
+                                    response = requests.get(url, params=params, auth=(EARTHDATA_USERNAME, EARTHDATA_PASSWORD), timeout=30)
+                                    if response.status_code == 200:
+                                        st.session_state.rgb_img_bytes = response.content
+                                        st.session_state.rgb_img_path = None
+                                        st.success("Imagen obtenida correctamente.")
+                                    else:
+                                        st.error(f"Error del servidor WMS: {response.status_code} - {response.reason}")
+                                        st.info("Generando imagen simulada como fallback...")
                                         from PIL import Image, ImageDraw
                                         img = Image.new('RGB', (512, 512), color='green')
                                         draw = ImageDraw.Draw(img)
@@ -3017,7 +3042,19 @@ if st.session_state.analisis_completado:
                                         st.session_state.rgb_img_bytes = buf.getvalue()
                                         st.session_state.rgb_img_path = None
                                         st.success("Imagen simulada generada (fallback).")
-                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error de conexión: {str(e)}")
+                                    st.info("Generando imagen simulada como fallback...")
+                                    from PIL import Image, ImageDraw
+                                    img = Image.new('RGB', (512, 512), color='green')
+                                    draw = ImageDraw.Draw(img)
+                                    draw.rectangle([100,100,400,400], outline='yellow', width=5)
+                                    buf = io.BytesIO()
+                                    img.save(buf, format='PNG')
+                                    buf.seek(0)
+                                    st.session_state.rgb_img_bytes = buf.getvalue()
+                                    st.session_state.rgb_img_path = None
+                                    st.success("Imagen simulada generada (fallback).")
 
             with col2:
                 if st.session_state.get('rgb_img_bytes') is not None:
@@ -3052,7 +3089,7 @@ if st.session_state.analisis_completado:
 
             if st.button("🚀 Ejecutar YOLO sobre la imagen descargada", use_container_width=True):
                 if st.session_state.get('rgb_img_bytes') is None:
-                    st.error("Primero debes descargar una imagen (botón 'Descargar imagen MODIS' o generar simulación).")
+                    st.error("Primero debes obtener una imagen (botón 'Obtener imagen MODIS').")
                 elif st.session_state.get('modelo_yolo') is None:
                     st.error("Debes cargar un modelo YOLO.")
                 else:
@@ -3079,7 +3116,6 @@ if st.session_state.analisis_completado:
                         leyenda_html = crear_leyenda_html(detecciones)
                         st.markdown(leyenda_html, unsafe_allow_html=True)
 
-                        # Botones de descarga
                         img_pil_anotada = Image.fromarray(cv2.cvtColor(img_anotada, cv2.COLOR_BGR2RGB))
                         buf_anotada = io.BytesIO()
                         img_pil_anotada.save(buf_anotada, format='PNG')
@@ -3093,13 +3129,6 @@ if st.session_state.analisis_completado:
                                            f"detecciones_{datetime.now():%Y%m%d_%H%M%S}.csv", "text/csv")
                     else:
                         st.warning("No se detectaron objetos con el umbral actual.")
-
-            if st.session_state.get('rgb_img_path') and os.path.exists(st.session_state.rgb_img_path):
-                if st.button("🗑️ Eliminar imagen temporal"):
-                    os.remove(st.session_state.rgb_img_path)
-                    st.session_state.rgb_img_path = None
-                    st.session_state.rgb_img_bytes = None
-                    st.success("Imagen eliminada.")
         
         with tab9:  # Análisis de Costos
             st.subheader("💰 Análisis de Costos de Producción")
