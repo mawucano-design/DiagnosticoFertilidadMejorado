@@ -1078,7 +1078,6 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
             st.warning("No se encontraron escenas MOD09GA en el período.")
             return None
 
-        # Elegir la primera escena (podría mejorarse seleccionando la de menor nubosidad)
         granule = results[0]
         st.info(f"Descargando imagen RGB: {granule['umm']['GranuleUR']}")
 
@@ -1099,108 +1098,134 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
                 st.error("El archivo descargado no es un HDF válido.")
                 return None
 
-            bandas = {}
-            if PYHDF_OK:
-                hdf = SD(download_path, SDC.READ)
-                for name in hdf.datasets().keys():
-                    if 'sur_refl_b01' in name:
-                        data = hdf.select(name).get()
-                        bandas['R'] = data * 0.0001
-                    elif 'sur_refl_b04' in name:
-                        data = hdf.select(name).get()
-                        bandas['G'] = data * 0.0001
-                    elif 'sur_refl_b03' in name:
-                        data = hdf.select(name).get()
-                        bandas['B'] = data * 0.0001
-            elif RASTERIO_OK:
-                with rasterio.open(download_path) as src:
-                    subdatasets = src.subdatasets
-                    for sd in subdatasets:
-                        if 'sur_refl_b01' in sd:
-                            with rasterio.open(sd) as b:
-                                arr = b.read(1)
-                                bandas['R'] = arr * 0.0001
-                        elif 'sur_refl_b04' in sd:
-                            with rasterio.open(sd) as b:
-                                arr = b.read(1)
-                                bandas['G'] = arr * 0.0001
-                        elif 'sur_refl_b03' in sd:
-                            with rasterio.open(sd) as b:
-                                arr = b.read(1)
-                                bandas['B'] = arr * 0.0001
-            else:
-                st.error("No se puede leer HDF (pyhdf ni rasterio).")
-                return None
+            # Función auxiliar para procesar bandas y obtener RGB
+            def procesar_bandas(bandas_dict):
+                # Verificar que tenemos las tres bandas
+                if not all(k in bandas_dict for k in ['R','G','B']):
+                    return None, "No se encontraron todas las bandas RGB."
 
-            if not all(k in bandas for k in ['R','G','B']):
-                st.error("No se encontraron todas las bandas RGB.")
-                return None
+                # Procesar cada banda para asegurar 2 dimensiones
+                bandas_proc = {}
+                for key in ['R', 'G', 'B']:
+                    banda = bandas_dict[key]
+                    # Aplicar factor de escala si no se hizo antes (asumimos que ya está escalado)
+                    # Asegurar que sea float
+                    banda = banda.astype(np.float32)
+                    
+                    # Eliminar dimensiones de tamaño 1
+                    banda = np.squeeze(banda)
+                    
+                    # Si es 1D, intentar remodelar a 2D buscando dimensiones que coincidan
+                    if banda.ndim == 1:
+                        # Intentar obtener dimensiones de metadatos (no disponible aquí)
+                        # Como último recurso, asumir que es una imagen cuadrada? No.
+                        # Mejor buscar la forma en los metadatos del archivo original.
+                        # Pero no tenemos acceso aquí.
+                        # En su lugar, si el tamaño total es producto de dos números razonables,
+                        # podríamos intentar una descomposición. Pero es complicado.
+                        # Mejor devolver error y pasar a rasterio.
+                        return None, f"La banda {key} es 1D con forma {banda.shape} y no se puede usar."
+                    
+                    if banda.ndim != 2:
+                        return None, f"La banda {key} tiene {banda.ndim} dimensiones, se esperaba 2."
+                    
+                    bandas_proc[key] = banda
 
-            # Procesar cada banda para asegurar 2 dimensiones
-            for key in ['R', 'G', 'B']:
-                banda = np.squeeze(bandas[key])  # elimina dimensiones de tamaño 1
-                if banda.ndim == 1:
-                    # Si sigue siendo 1D, intentar remodelar a 2D si es cuadrado perfecto
-                    # (esto es poco probable, pero se intenta)
-                    size = banda.shape[0]
-                    side = int(np.sqrt(size))
-                    if side * side == size:
-                        banda = banda.reshape(side, side)
-                    else:
-                        st.error(f"La banda {key} tiene forma 1D {banda.shape} y no se puede remodelar a 2D.")
-                        return None
-                elif banda.ndim > 2:
-                    st.error(f"La banda {key} tiene {banda.ndim} dimensiones después de squeeze, se esperaba 2.")
-                    return None
-                bandas[key] = banda
+                # Verificar que todas tengan la misma forma
+                shape_r = bandas_proc['R'].shape
+                if bandas_proc['G'].shape != shape_r or bandas_proc['B'].shape != shape_r:
+                    return None, f"Las bandas no tienen las mismas dimensiones: R={shape_r}, G={bandas_proc['G'].shape}, B={bandas_proc['B'].shape}"
 
-            # Verificar que todas tengan la misma forma
-            shape_r = bandas['R'].shape
-            if bandas['G'].shape != shape_r or bandas['B'].shape != shape_r:
-                st.error(f"Las bandas RGB no tienen las mismas dimensiones: R={shape_r}, G={bandas['G'].shape}, B={bandas['B'].shape}")
-                return None
+                if shape_r[0] < 10 or shape_r[1] < 10:
+                    return None, f"La imagen es demasiado pequeña: {shape_r[0]}x{shape_r[1]}. Mínimo 10x10."
 
-            # Verificar que la imagen tenga al menos 10x10 píxeles
-            if shape_r[0] < 10 or shape_r[1] < 10:
-                st.error(f"La imagen es demasiado pequeña: {shape_r[0]}x{shape_r[1]}. Se requiere al menos 10x10.")
-                return None
-
-            # Escalar a 8 bits usando percentiles para mejorar contraste
-            def scale_band(band):
-                valid = band[band > 0]
-                if len(valid) == 0:
-                    return np.zeros_like(band, dtype=np.uint8)
-                p2 = np.percentile(valid, 2)
-                p98 = np.percentile(valid, 98)
-                if p98 - p2 < 1e-6:
-                    scaled = np.zeros_like(band, dtype=np.uint8)
-                else:
+                # Escalar a 8 bits
+                def scale_band(band):
+                    valid = band[band > 0]
+                    if len(valid) == 0:
+                        return np.zeros_like(band, dtype=np.uint8)
+                    p2 = np.percentile(valid, 2)
+                    p98 = np.percentile(valid, 98)
+                    if p98 - p2 < 1e-6:
+                        return np.zeros_like(band, dtype=np.uint8)
                     scaled = np.clip((band - p2) / (p98 - p2), 0, 1) * 255
-                return scaled.astype(np.uint8)
+                    return scaled.astype(np.uint8)
 
-            r_8 = scale_band(bandas['R'])
-            g_8 = scale_band(bandas['G'])
-            b_8 = scale_band(bandas['B'])
+                r_8 = scale_band(bandas_proc['R'])
+                g_8 = scale_band(bandas_proc['G'])
+                b_8 = scale_band(bandas_proc['B'])
 
-            # Apilar en RGB
-            rgb = np.stack([r_8, g_8, b_8], axis=-1)
+                rgb = np.stack([r_8, g_8, b_8], axis=-1)
+                if rgb.ndim != 3 or rgb.shape[2] != 3:
+                    return None, f"RGB final tiene forma incorrecta: {rgb.shape}"
 
-            # Verificar forma final
-            if rgb.ndim != 3 or rgb.shape[2] != 3:
-                st.error(f"La imagen RGB final tiene forma incorrecta: {rgb.shape}")
-                return None
+                return rgb, None
 
-            # Guardar como PNG temporal
-            img_path = os.path.join(temp_dir, "rgb_modis.png")
-            img_pil = Image.fromarray(rgb)
-            img_pil.save(img_path, format='PNG')
+            # Intentar con pyhdf primero
+            if PYHDF_OK:
+                try:
+                    hdf = SD(download_path, SDC.READ)
+                    bandas = {}
+                    for name in hdf.datasets().keys():
+                        if 'sur_refl_b01' in name:
+                            data = hdf.select(name).get()
+                            bandas['R'] = data * 0.0001
+                        elif 'sur_refl_b04' in name:
+                            data = hdf.select(name).get()
+                            bandas['G'] = data * 0.0001
+                        elif 'sur_refl_b03' in name:
+                            data = hdf.select(name).get()
+                            bandas['B'] = data * 0.0001
+                    
+                    rgb, error = procesar_bandas(bandas)
+                    if rgb is not None:
+                        # Guardar imagen
+                        img_path = os.path.join(temp_dir, "rgb_modis.png")
+                        Image.fromarray(rgb).save(img_path)
+                        if os.path.exists(img_path) and os.path.getsize(img_path) > 100:
+                            return img_path
+                        else:
+                            st.error("La imagen generada con pyhdf no es válida.")
+                    else:
+                        st.warning(f"pyhdf falló al procesar bandas: {error}. Intentando con rasterio...")
+                except Exception as e:
+                    st.warning(f"pyhdf falló con excepción: {str(e)}. Intentando con rasterio...")
 
-            # Verificar que la imagen guardada sea válida
-            if not os.path.exists(img_path) or os.path.getsize(img_path) < 100:
-                st.error("La imagen generada no es válida (tamaño muy pequeño).")
-                return None
+            # Si pyhdf no funcionó, intentar con rasterio
+            if RASTERIO_OK:
+                try:
+                    with rasterio.open(download_path) as src:
+                        subdatasets = src.subdatasets
+                        bandas = {}
+                        for sd in subdatasets:
+                            if 'sur_refl_b01' in sd:
+                                with rasterio.open(sd) as b:
+                                    arr = b.read(1)
+                                    bandas['R'] = arr * 0.0001
+                            elif 'sur_refl_b04' in sd:
+                                with rasterio.open(sd) as b:
+                                    arr = b.read(1)
+                                    bandas['G'] = arr * 0.0001
+                            elif 'sur_refl_b03' in sd:
+                                with rasterio.open(sd) as b:
+                                    arr = b.read(1)
+                                    bandas['B'] = arr * 0.0001
+                        
+                        rgb, error = procesar_bandas(bandas)
+                        if rgb is not None:
+                            img_path = os.path.join(temp_dir, "rgb_modis.png")
+                            Image.fromarray(rgb).save(img_path)
+                            if os.path.exists(img_path) and os.path.getsize(img_path) > 100:
+                                return img_path
+                            else:
+                                st.error("La imagen generada con rasterio no es válida.")
+                        else:
+                            st.error(f"rasterio falló al procesar bandas: {error}")
+                except Exception as e:
+                    st.error(f"rasterio falló con excepción: {str(e)}")
 
-            return img_path
+            st.error("No se pudo generar la imagen RGB con ninguno de los métodos.")
+            return None
 
         except Exception as e:
             st.error(f"Error procesando imagen RGB: {str(e)}")
@@ -1209,7 +1234,6 @@ def obtener_rgb_earthdata(gdf, fecha_inicio, fecha_fin):
     except Exception as e:
         st.error(f"Error obteniendo imagen RGB: {str(e)}")
         return None
-
 # ===== FUNCIONES CLIMÁTICAS =====
 def obtener_clima_openmeteo(gdf, fecha_inicio, fecha_fin):
     try:
