@@ -2947,11 +2947,21 @@ if st.session_state.analisis_completado:
                                     st.session_state.fecha_inicio,
                                     st.session_state.fecha_fin
                                 )
-                                if ruta_img and os.path.exists(ruta_img) and os.path.getsize(ruta_img) > 0:
-                                    with open(ruta_img, 'rb') as f:
-                                        st.session_state.rgb_img_bytes = f.read()
-                                    st.session_state.rgb_img_path = ruta_img
-                                    st.success("Imagen descargada correctamente.")
+                                if ruta_img and os.path.exists(ruta_img) and os.path.getsize(ruta_img) > 100:
+                                    # Verificar que sea una imagen válida
+                                    try:
+                                        with open(ruta_img, 'rb') as f:
+                                            img_data = f.read()
+                                        # Intentar abrir con PIL para validar
+                                        test_img = Image.open(io.BytesIO(img_data))
+                                        test_img.verify()  # lanza excepción si no es válida
+                                        st.session_state.rgb_img_bytes = img_data
+                                        st.session_state.rgb_img_path = ruta_img
+                                        st.success("Imagen descargada correctamente.")
+                                    except Exception as e:
+                                        st.error(f"El archivo descargado no es una imagen válida: {str(e)}")
+                                        st.session_state.rgb_img_bytes = None
+                                        st.session_state.rgb_img_path = None
                                 else:
                                     st.error("No se pudo obtener la imagen MODIS o el archivo está vacío.")
 
@@ -2994,16 +3004,27 @@ if st.session_state.analisis_completado:
                     st.error("Debes cargar un modelo YOLO (sube uno arriba).")
                 else:
                     try:
+                        # Abrir imagen con PIL y asegurar formato RGB
                         img_pil = Image.open(io.BytesIO(st.session_state.rgb_img_bytes))
-                        if img_pil is None or img_pil.size[0] == 0 or img_pil.size[1] == 0:
-                            st.error("La imagen descargada no es válida (tamaño cero).")
+                        if img_pil.mode != 'RGB':
+                            img_pil = img_pil.convert('RGB')
+                        if img_pil.width == 0 or img_pil.height == 0:
+                            st.error("La imagen descargada tiene dimensiones cero.")
                             st.stop()
-                        imagen_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+                        
+                        # Convertir a numpy array y luego a BGR para OpenCV
+                        img_np = np.array(img_pil)
+                        if img_np.ndim == 2:  # escala de grises
+                            img_np = np.stack([img_np]*3, axis=-1)
+                        elif img_np.shape[2] == 4:  # RGBA
+                            img_np = img_np[:, :, :3]
+                        
+                        imagen_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
                         if imagen_cv is None or imagen_cv.size == 0:
                             st.error("No se pudo convertir la imagen a formato OpenCV.")
                             st.stop()
                     except Exception as e:
-                        st.error(f"Error al cargar la imagen: {str(e)}")
+                        st.error(f"Error al cargar o procesar la imagen: {str(e)}")
                         st.stop()
                     
                     resultados = detectar_en_imagen(st.session_state.modelo_yolo, imagen_cv, conf_threshold=umbral_confianza_sat)
